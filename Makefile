@@ -53,13 +53,13 @@ $(OUT_DIR) $(HOST_DIR):
 	$(MKDIR_P) $@
 
 $(GENERATED)/softloader_asset.c: assets/softloader.nvm | $(GENERATED)
-	xxd -i -n g_softloader_nvm $< > $@
+	xxd -i -n g_softloader_nvm $< | sed -e 's/^unsigned char /const unsigned char /' -e 's/^unsigned int /const unsigned int /' > $@
 
 $(GENERATED)/firmware_asset.c: assets/firmware.nvm | $(GENERATED)
-	xxd -i -n g_firmware_nvm $< > $@
+	xxd -i -n g_firmware_nvm $< | sed -e 's/^unsigned char /const unsigned char /' -e 's/^unsigned int /const unsigned int /' > $@
 
 $(GENERATED)/evse_asset.c: assets/evse.pib | $(GENERATED)
-	xxd -i -n g_evse_pib $< > $@
+	xxd -i -n g_evse_pib $< | sed -e 's/^unsigned char /const unsigned char /' -e 's/^unsigned int /const unsigned int /' > $@
 
 $(OUT_DIR)/%.o: src/%.cpp Makefile | $(OUT_DIR)
 	$(CPP) $(FW_CPPFLAGS) -c $< -o $@

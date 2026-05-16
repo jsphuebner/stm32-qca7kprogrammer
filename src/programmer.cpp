@@ -672,7 +672,7 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
        pib_transfer_length > images.pib.size)
       return PROGRAMMER_INVALID_IMAGES;
 
-   MmeSession session = {};
+   MmeSession session;
    session.transport = &transport;
    mem_copy(session.peer, kLocalCast, sizeof(session.peer));
 
