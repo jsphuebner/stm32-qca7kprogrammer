@@ -1,7 +1,6 @@
 BINARY      = stm32_qca7kprogrammer
 OUT_DIR     = build/firmware
 HOST_DIR    = build/host
-GENERATED   = generated
 PREFIX      ?= arm-none-eabi
 CC          = $(PREFIX)-gcc
 CPP         = $(PREFIX)-g++
@@ -23,15 +22,15 @@ HOST_FLAGS      = -O2 $(COMMON_WARNINGS) $(COMMON_INCLUDES) -DHOST_BUILD -std=c+
 HOST_CFLAGS     = -O2 $(COMMON_WARNINGS) $(COMMON_INCLUDES) -DHOST_BUILD -std=gnu11
 
 FW_CPP_SRCS     = src/main.cpp src/programmer.cpp src/qca7005_transport.cpp src/hwinit.cpp src/embedded_images.cpp
-FW_C_SRCS       = src/startup.c $(GENERATED)/softloader_asset.c $(GENERATED)/firmware_asset.c $(GENERATED)/evse_asset.c
+FW_C_SRCS       = src/startup.c src/softloader_asset.c src/firmware_asset.c src/evse_asset.c
 FW_CPP_OBJS     = $(patsubst src/%.cpp,$(OUT_DIR)/%.o,$(FW_CPP_SRCS))
-FW_C_OBJS       = $(patsubst src/%.c,$(OUT_DIR)/%.o,$(filter src/%.c,$(FW_C_SRCS))) \
-                  $(OUT_DIR)/softloader_asset.o $(OUT_DIR)/firmware_asset.o $(OUT_DIR)/evse_asset.o
+FW_C_OBJS       = $(patsubst src/%.c,$(OUT_DIR)/%.o,$(FW_C_SRCS))
 FW_OBJS         = $(FW_CPP_OBJS) $(FW_C_OBJS)
 HOST_CPP_SRCS   = src/programmer.cpp src/qca7005_transport.cpp src/hwinit.cpp src/main.cpp src/embedded_images.cpp tests/programmer_tests.cpp
 HOST_CPP_OBJS   = $(patsubst src/%.cpp,$(HOST_DIR)/src_%.o,$(filter src/%.cpp,$(HOST_CPP_SRCS))) \
                   $(HOST_DIR)/tests_programmer_tests.o
-HOST_C_OBJS     = $(HOST_DIR)/softloader_asset.o $(HOST_DIR)/firmware_asset.o $(HOST_DIR)/evse_asset.o
+HOST_C_SRCS     = src/softloader_asset.c src/firmware_asset.c src/evse_asset.c
+HOST_C_OBJS     = $(patsubst src/%.c,$(HOST_DIR)/src_%.o,$(HOST_C_SRCS))
 HOST_OBJS       = $(HOST_CPP_OBJS) $(HOST_C_OBJS)
 
 all: test
@@ -46,34 +45,13 @@ check-cross-tools:
 	@command -v $(CC) >/dev/null 2>&1 || (echo "Missing $(CC). Install arm-none-eabi toolchain or set PREFIX=..." && exit 1)
 	@command -v $(OBJCOPY) >/dev/null 2>&1 || (echo "Missing $(OBJCOPY). Install arm-none-eabi toolchain or set PREFIX=..." && exit 1)
 
-$(GENERATED):
-	$(MKDIR_P) $(GENERATED)
-
 $(OUT_DIR) $(HOST_DIR):
 	$(MKDIR_P) $@
-
-$(GENERATED)/softloader_asset.c: assets/softloader.nvm | $(GENERATED)
-	xxd -i -n g_softloader_nvm $< | sed -e 's/^unsigned char /const unsigned char /' -e 's/^unsigned int /const unsigned int /' > $@
-
-$(GENERATED)/firmware_asset.c: assets/firmware.nvm | $(GENERATED)
-	xxd -i -n g_firmware_nvm $< | sed -e 's/^unsigned char /const unsigned char /' -e 's/^unsigned int /const unsigned int /' > $@
-
-$(GENERATED)/evse_asset.c: assets/evse.pib | $(GENERATED)
-	xxd -i -n g_evse_pib $< | sed -e 's/^unsigned char /const unsigned char /' -e 's/^unsigned int /const unsigned int /' > $@
 
 $(OUT_DIR)/%.o: src/%.cpp Makefile | $(OUT_DIR)
 	$(CPP) $(FW_CPPFLAGS) -c $< -o $@
 
 $(OUT_DIR)/%.o: src/%.c Makefile | $(OUT_DIR)
-	$(CC) $(FW_CFLAGS) -c $< -o $@
-
-$(OUT_DIR)/softloader_asset.o: $(GENERATED)/softloader_asset.c Makefile | $(OUT_DIR)
-	$(CC) $(FW_CFLAGS) -c $< -o $@
-
-$(OUT_DIR)/firmware_asset.o: $(GENERATED)/firmware_asset.c Makefile | $(OUT_DIR)
-	$(CC) $(FW_CFLAGS) -c $< -o $@
-
-$(OUT_DIR)/evse_asset.o: $(GENERATED)/evse_asset.c Makefile | $(OUT_DIR)
 	$(CC) $(FW_CFLAGS) -c $< -o $@
 
 $(OUT_DIR)/$(BINARY).elf: $(FW_OBJS) stm32_qca7kprogrammer.ld
@@ -92,19 +70,13 @@ $(HOST_DIR)/src_%.o: src/%.cpp Makefile | $(HOST_DIR)
 $(HOST_DIR)/tests_programmer_tests.o: tests/programmer_tests.cpp Makefile | $(HOST_DIR)
 	$(HOST_CXX) $(HOST_FLAGS) -c $< -o $@
 
-$(HOST_DIR)/softloader_asset.o: $(GENERATED)/softloader_asset.c Makefile | $(HOST_DIR)
+$(HOST_DIR)/src_%.o: src/%.c Makefile | $(HOST_DIR)
 	$(HOST_CC) $(HOST_CFLAGS) -c $< -o $@
 
-$(HOST_DIR)/firmware_asset.o: $(GENERATED)/firmware_asset.c Makefile | $(HOST_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -c $< -o $@
-
-$(HOST_DIR)/evse_asset.o: $(GENERATED)/evse_asset.c Makefile | $(HOST_DIR)
-	$(HOST_CC) $(HOST_CFLAGS) -c $< -o $@
-
-$(HOST_DIR)/programmer_tests: $(GENERATED)/softloader_asset.c $(GENERATED)/firmware_asset.c $(GENERATED)/evse_asset.c $(HOST_OBJS)
+$(HOST_DIR)/programmer_tests: $(HOST_OBJS)
 	$(HOST_CXX) -o $@ $(HOST_OBJS)
 
 clean:
-	rm -rf build generated
+	rm -rf build
 
 .PHONY: all clean firmware test check-cross-tools
