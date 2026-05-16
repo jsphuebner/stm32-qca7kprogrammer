@@ -39,7 +39,7 @@ struct PACKED VsWriteExecuteRequest
    QualcommHeader qualcomm;
    uint32_t client_session_id;
    uint32_t server_session_id;
-   uint32_t flags;
+   uint32_t write_flags;
    uint8_t allowed_mem_types[8];
    uint32_t total_length;
    uint32_t current_part_length;
@@ -324,11 +324,40 @@ void test_invalid_image_detection()
                                    FakeTransport::delay_ms, FakeTransport::millis };
    assert(run_programmer(images, transport) == PROGRAMMER_INVALID_IMAGES);
 }
+
+void test_corrupt_payload_detection()
+{
+   const std::vector<uint8_t> payload = { 0x01, 0x02, 0x03, 0x04 };
+   std::vector<uint8_t> softloader = append(make_header(0x000Bu, 0x1000u, 0x1000u, payload, 0xFFFFFFFFu), payload);
+
+   const uint32_t firmware_second_header = (uint32_t)(sizeof(NvmHeader2) + payload.size());
+   std::vector<uint8_t> firmware = append(make_header(0x0007u, 0x2000u, 0x2000u, payload, firmware_second_header), payload);
+   firmware = append(firmware, make_header(0x0004u, 0x3000u, 0x3000u, payload, 0xFFFFFFFFu));
+   firmware = append(firmware, payload);
+
+   const uint32_t pib_second_header = (uint32_t)(sizeof(NvmHeader2) + payload.size());
+   std::vector<uint8_t> pib = append(make_header(0x000Eu, 0x4000u, 0x4000u, payload, pib_second_header), payload);
+   pib = append(pib, make_header(0x000Fu, 0x5000u, 0x5000u, payload, 0xFFFFFFFFu));
+   pib = append(pib, payload);
+
+   firmware[sizeof(NvmHeader2)] ^= 0xFFu;
+
+   EmbeddedImages images = {
+      { "softloader.nvm", softloader.data(), softloader.size() },
+      { "firmware.nvm", firmware.data(), firmware.size() },
+      { "evse.pib", pib.data(), pib.size() }
+   };
+   FakeTransport fake;
+   EthernetTransport transport = { &fake, FakeTransport::send_frame, FakeTransport::receive_frame,
+                                   FakeTransport::delay_ms, FakeTransport::millis };
+   assert(run_programmer(images, transport) == PROGRAMMER_INVALID_IMAGES);
+}
 } // namespace
 
 int main()
 {
    test_programmer_flow();
    test_invalid_image_detection();
+   test_corrupt_payload_detection();
    return 0;
 }

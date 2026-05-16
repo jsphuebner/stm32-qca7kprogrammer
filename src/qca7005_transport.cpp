@@ -115,23 +115,23 @@ int qca_receive_frame_impl(void* context, uint8_t* frame, size_t capacity, uint3
          size_t offset = 0u;
          while (offset + 12u <= available)
          {
-            const uint16_t outer_length = (uint16_t)((transport->rx_buffer[offset + 2u] << 8) |
-                                                     transport->rx_buffer[offset + 3u]);
-            uint16_t inner_length = (uint16_t)((transport->rx_buffer[offset + 9u] << 8) |
-                                               transport->rx_buffer[offset + 8u]);
-            if (outer_length < 10u || inner_length + 10u != outer_length)
+            const uint16_t spi_frame_length = (uint16_t)((transport->rx_buffer[offset + 2u] << 8) |
+                                                         transport->rx_buffer[offset + 3u]);
+            uint16_t ethernet_frame_length = (uint16_t)((transport->rx_buffer[offset + 9u] << 8) |
+                                                        transport->rx_buffer[offset + 8u]);
+            if (spi_frame_length < 10u || ethernet_frame_length + 10u != spi_frame_length)
                break;
-            if (offset + outer_length + 4u > available)
+            if (offset + spi_frame_length + 4u > available)
                break;
             if (transport->rx_buffer[offset + 4u] != 0xAAu ||
                 transport->rx_buffer[offset + 5u] != 0xAAu ||
                 transport->rx_buffer[offset + 6u] != 0xAAu ||
                 transport->rx_buffer[offset + 7u] != 0xAAu)
                break;
-            if (inner_length > capacity)
-               inner_length = (uint16_t)capacity;
-            mem_copy(frame, &transport->rx_buffer[offset + 12u], inner_length);
-            return inner_length;
+            if (ethernet_frame_length > capacity)
+               ethernet_frame_length = (uint16_t)capacity;
+            mem_copy(frame, &transport->rx_buffer[offset + 12u], ethernet_frame_length);
+            return ethernet_frame_length;
          }
       }
       delay_ms(1u);

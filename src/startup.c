@@ -33,20 +33,20 @@ void Reset_Handler(void)
 
 __attribute__((section(".isr_vector")))
 void (*const g_pfnVectors[])(void) = {
-   (void (*)(void))(&_estack),
-   Reset_Handler,
-   Default_Handler,
-   Default_Handler,
-   Default_Handler,
-   Default_Handler,
-   Default_Handler,
-   0,
-   0,
-   0,
-   0,
-   Default_Handler,
-   Default_Handler,
-   0,
-   Default_Handler,
-   SysTick_Handler,
+   (void (*)(void))(&_estack), /* Initial stack pointer */
+   Reset_Handler,              /* Reset */
+   Default_Handler,            /* NMI */
+   Default_Handler,            /* HardFault */
+   Default_Handler,            /* MemManage */
+   Default_Handler,            /* BusFault */
+   Default_Handler,            /* UsageFault */
+   0,                          /* Reserved */
+   0,                          /* Reserved */
+   0,                          /* Reserved */
+   0,                          /* Reserved */
+   Default_Handler,            /* SVCall */
+   Default_Handler,            /* Debug monitor */
+   0,                          /* Reserved */
+   Default_Handler,            /* PendSV */
+   SysTick_Handler,            /* SysTick */
 };

@@ -80,7 +80,7 @@ void delay_ms(uint32_t value)
 {
    const uint32_t end = g_millis + value;
    while ((int32_t)(end - g_millis) > 0)
-      ;
+      __asm__ volatile("nop");
 }
 
 uint32_t millis(void)

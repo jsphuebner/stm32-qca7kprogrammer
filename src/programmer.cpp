@@ -25,6 +25,7 @@ constexpr uint32_t kModuleTimeoutMs = 90000u;
 constexpr uint32_t kCommitFlags = 0x80000003u;
 constexpr uint32_t kModuleFlagExecute = (1u << 0);
 constexpr uint32_t kModuleFlagAbsolute = (1u << 1);
+constexpr uint32_t kRequiredEntryAlignment = sizeof(uint32_t);
 constexpr uint16_t kModuleOpStartSession = 0x0010;
 constexpr uint16_t kModuleOpWriteModule = 0x0011;
 constexpr uint16_t kModuleOpCloseSession = 0x0012;
@@ -377,6 +378,16 @@ bool compute_module_spec(const EmbeddedImage& image, ModuleSpec& spec, uint16_t 
    return true;
 }
 
+bool validate_image_payload(const EmbeddedImage& image, const ImageDescriptor& descriptor)
+{
+   const uint32_t image_length = le32_to_host(descriptor.header.image_length);
+   if (descriptor.data_offset + image_length > image.size)
+      return false;
+
+   return checksum32(image.data + descriptor.data_offset, image_length, 0u) ==
+          le32_to_host(descriptor.header.image_checksum);
+}
+
 bool wait_for_start(MmeSession& session, char* version, size_t version_capacity)
 {
    const uint32_t deadline = session.transport->millis(session.transport->context) + kStartTimeoutMs;
@@ -430,7 +441,7 @@ bool write_execute(MmeSession& session,
 
       size_t chunk = remaining > kModuleChunk ? kModuleChunk : remaining;
       uint32_t flags = kModuleFlagAbsolute;
-      if (execute_on_last && chunk == remaining && (entry_point % sizeof(uint32_t) == 0u))
+      if (execute_on_last && chunk == remaining && (entry_point % kRequiredEntryAlignment == 0u))
          flags |= kModuleFlagExecute;
 
       request->client_session_id = host_to_le32(kCookie);
@@ -642,6 +653,12 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
        !find_image(images.firmware, kImageTypeFirmware, runtime) ||
        !find_image(images.pib, kImageTypePib, pib) ||
        !find_image(images.pib, kImageTypeManifest, pib_manifest))
+      return PROGRAMMER_INVALID_IMAGES;
+
+   if (!validate_image_payload(images.firmware, memctl) ||
+       !validate_image_payload(images.firmware, runtime) ||
+       !validate_image_payload(images.pib, pib) ||
+       !validate_image_payload(images.pib, pib_manifest))
       return PROGRAMMER_INVALID_IMAGES;
 
    const uint32_t memctl_length = le32_to_host(memctl.header.image_length);

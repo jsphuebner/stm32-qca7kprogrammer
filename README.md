@@ -16,15 +16,15 @@ On boot the firmware:
 4. uses `VS_MODULE_OPERATION` to flash `softloader.nvm`, `evse.pib` and `firmware.nvm`,
 5. resets the QCA7005 and waits for the final firmware to start.
 
-The SPI framing follows the STM32/QCA7005 example used in `jsphuebner/ccs32clara`, while the HomePlug/MME sequencing follows `qca/open-plc-utils`.
+The SPI framing follows the STM32/QCA7005 example used in [`jsphuebner/ccs32clara`](https://github.com/jsphuebner/ccs32clara), which already shows direct QCA7005 SPI communication from STM32 firmware. The HomePlug/MME sequencing follows [`qca/open-plc-utils`](https://github.com/qca/open-plc-utils), specifically the `plcboot` flow that writes softloader, firmware and PIB data to flash.
 
 ## Embedded input files
 
 The firmware links these three files into the STM32 image:
 
-- `/home/runner/work/stm32-qca7kprogrammer/stm32-qca7kprogrammer/assets/softloader.nvm`
-- `/home/runner/work/stm32-qca7kprogrammer/stm32-qca7kprogrammer/assets/firmware.nvm`
-- `/home/runner/work/stm32-qca7kprogrammer/stm32-qca7kprogrammer/assets/evse.pib`
+- `assets/softloader.nvm`
+- `assets/firmware.nvm`
+- `assets/evse.pib`
 
 Placeholder files are committed so the project builds. Replace them with the real binaries before producing the final STM32 firmware image.
 
@@ -35,6 +35,6 @@ Placeholder files are committed so the project builds. Replace them with the rea
 
 ## Notes
 
-- The firmware is written in a small standalone style similar to `stm32-CANBootloader`.
+- The firmware is written in a small standalone style similar to [`stm32-CANBootloader`](https://github.com/jsphuebner/stm32-CANBootloader): a compact Makefile-based STM32 project with minimal startup code and application logic kept in a few focused source files.
 - The current hardware setup targets an STM32F103 with QCA7005 on SPI1 (`PA4` CS, `PA5` SCK, `PA6` MISO, `PA7` MOSI).
 - The placeholder asset contents are not valid QCA images; flashing only works after replacing them with the real files.
