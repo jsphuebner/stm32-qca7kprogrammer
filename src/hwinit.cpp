@@ -1,4 +1,5 @@
 #include "hwinit.h"
+#include <stddef.h>
 
 #ifndef HOST_BUILD
 namespace {
