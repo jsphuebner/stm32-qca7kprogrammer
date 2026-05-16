@@ -32,21 +32,21 @@ void Reset_Handler(void)
 }
 
 __attribute__((section(".isr_vector")))
-void (*const g_pfnVectors[])(void) = {
-   (void (*)(void))(&_estack), /* Initial stack pointer */
-   Reset_Handler,              /* Reset */
-   Default_Handler,            /* NMI */
-   Default_Handler,            /* HardFault */
-   Default_Handler,            /* MemManage */
-   Default_Handler,            /* BusFault */
-   Default_Handler,            /* UsageFault */
-   0,                          /* Reserved */
-   0,                          /* Reserved */
-   0,                          /* Reserved */
-   0,                          /* Reserved */
-   Default_Handler,            /* SVCall */
-   Default_Handler,            /* Debug monitor */
-   0,                          /* Reserved */
-   Default_Handler,            /* PendSV */
-   SysTick_Handler,            /* SysTick */
+uintptr_t const g_pfnVectors[] = {
+   (uintptr_t)(&_estack),          /* Initial stack pointer */
+   (uintptr_t)Reset_Handler,       /* Reset */
+   (uintptr_t)Default_Handler,     /* NMI */
+   (uintptr_t)Default_Handler,     /* HardFault */
+   (uintptr_t)Default_Handler,     /* MemManage */
+   (uintptr_t)Default_Handler,     /* BusFault */
+   (uintptr_t)Default_Handler,     /* UsageFault */
+   (uintptr_t)0,                   /* Reserved */
+   (uintptr_t)0,                   /* Reserved */
+   (uintptr_t)0,                   /* Reserved */
+   (uintptr_t)0,                   /* Reserved */
+   (uintptr_t)Default_Handler,     /* SVCall */
+   (uintptr_t)Default_Handler,     /* Debug monitor */
+   (uintptr_t)0,                   /* Reserved */
+   (uintptr_t)Default_Handler,     /* PendSV */
+   (uintptr_t)SysTick_Handler,     /* SysTick */
 };
