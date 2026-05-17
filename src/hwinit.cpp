@@ -9,14 +9,14 @@
 #include <libopencm3/stm32/usart.h>
 namespace {
 volatile uint32_t g_millis = 0;
-constexpr uint16_t kLedPinsMask = GPIO0 | GPIO1 | GPIO2;
+constexpr uint16_t kLedPinsMask = GPIO2 | GPIO10 | GPIO11;
 
 void set_led_mask(uint32_t on_mask)
 {
    const uint16_t set_bits = (uint16_t)(kLedPinsMask & (uint16_t)on_mask);
    const uint16_t clear_bits = (uint16_t)(kLedPinsMask & (uint16_t)~on_mask);
-   gpio_set(GPIOA, set_bits);
-   gpio_clear(GPIOA, clear_bits);
+   gpio_set(GPIOB, set_bits);
+   gpio_clear(GPIOB, clear_bits);
 }
 }
 
@@ -29,7 +29,9 @@ void clock_setup(void)
 {
    rcc_periph_clock_enable(RCC_AFIO);
    rcc_periph_clock_enable(RCC_GPIOA);
-   rcc_periph_clock_enable(RCC_USART1);
+   rcc_periph_clock_enable(RCC_GPIOB);
+   rcc_periph_clock_enable(RCC_GPIOC);
+   rcc_periph_clock_enable(RCC_UART4);
    rcc_periph_clock_enable(RCC_SPI1);
 }
 
@@ -44,13 +46,17 @@ void systick_setup(uint32_t cpu_hz)
 
 void gpio_setup(void)
 {
-   gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, kLedPinsMask | GPIO4);
+   gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, kLedPinsMask);
+   gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, GPIO4);
    gpio_set_mode(GPIOA,
                  GPIO_MODE_OUTPUT_50_MHZ,
                  GPIO_CNF_OUTPUT_ALTFN_PUSHPULL,
-                 GPIO5 | GPIO7 | GPIO9);
-   gpio_set_mode(GPIOA, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, GPIO6 | GPIO10);
-   gpio_clear(GPIOA, kLedPinsMask | GPIO4);
+                 GPIO5 | GPIO7);
+   gpio_set_mode(GPIOA, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, GPIO6);
+   gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO10);
+   gpio_set_mode(GPIOC, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, GPIO11);
+   gpio_clear(GPIOB, kLedPinsMask);
+   gpio_set(GPIOA, GPIO4);
 }
 
 void spi_setup(void)
@@ -69,13 +75,13 @@ void spi_setup(void)
 
 void debug_uart_setup(void)
 {
-   usart_set_baudrate(USART1, 115200u);
-   usart_set_databits(USART1, 8u);
-   usart_set_stopbits(USART1, USART_STOPBITS_1);
-   usart_set_parity(USART1, USART_PARITY_NONE);
-   usart_set_flow_control(USART1, USART_FLOWCONTROL_NONE);
-   usart_set_mode(USART1, USART_MODE_TX);
-   usart_enable(USART1);
+   usart_set_baudrate(UART4, 921600u);
+   usart_set_databits(UART4, 8u);
+   usart_set_stopbits(UART4, USART_STOPBITS_1);
+   usart_set_parity(UART4, USART_PARITY_NONE);
+   usart_set_flow_control(UART4, USART_FLOWCONTROL_NONE);
+   usart_set_mode(UART4, USART_MODE_TX);
+   usart_enable(UART4);
 }
 
 void delay_ms(uint32_t value)
@@ -92,7 +98,7 @@ uint32_t millis(void)
 
 void debug_putc(char ch)
 {
-   usart_send_blocking(USART1, (uint16_t)(uint8_t)ch);
+   usart_send_blocking(UART4, (uint16_t)(uint8_t)ch);
 }
 
 void debug_puts(const char* text)
