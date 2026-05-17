@@ -379,7 +379,7 @@ void test_programmer_flow()
    assert(result == PROGRAMMER_OK);
 
    const std::vector<uint16_t> expected = {
-      0xA000, 0xA098, 0xA098, 0xA098, 0xA000,
+      0xA000, 0xA098, 0xA098,
       0xA0B0, 0xF010, 0xA0B0, 0xF011, 0xA0B0, 0xF012,
       0xA0B0, 0xF010, 0xA0B0, 0xF011, 0xA0B0, 0xF011, 0xA0B0, 0xF012,
       0xA01C, 0xA000
@@ -525,61 +525,6 @@ void test_host_action_indication_is_acknowledged()
    assert(saw_rsp);
 }
 
-void test_runtime_start_waits_past_bootloader_transition()
-{
-   const std::vector<uint8_t> payload = { 0x01, 0x02, 0x03, 0x04 };
-   std::vector<uint8_t> softloader = append(make_header(0x000Bu, 0x1000u, 0x1000u, payload, 0xFFFFFFFFu), payload);
-
-   const uint32_t firmware_second_header = (uint32_t)(sizeof(NvmHeader2) + payload.size());
-   std::vector<uint8_t> firmware = append(make_header(0x0007u, 0x2000u, 0x2000u, payload, firmware_second_header), payload);
-   firmware = append(firmware, make_header(0x0004u, 0x3000u, 0x3000u, payload, 0xFFFFFFFFu));
-   firmware = append(firmware, payload);
-
-   const uint32_t pib_second_header = (uint32_t)(sizeof(NvmHeader2) + payload.size());
-   std::vector<uint8_t> pib = append(make_header(0x000Eu, 0x4000u, 0x4000u, payload, pib_second_header), payload);
-   pib = append(pib, make_header(0x000Fu, 0x5000u, 0x5000u, payload, 0xFFFFFFFFu));
-   pib = append(pib, payload);
-
-   EmbeddedImages images = {
-      { "softloader.nvm", softloader.data(), softloader.size() },
-      { "firmware.nvm", firmware.data(), firmware.size() },
-      { "evse.pib", pib.data(), pib.size() }
-   };
-
-   FakeTransport fake;
-   fake.sw_ver_bootloader_count = 2;
-   EthernetTransport transport = { &fake, FakeTransport::send_frame, FakeTransport::receive_frame,
-                                   FakeTransport::delay_ms, FakeTransport::millis };
-   assert(run_programmer(images, transport) == PROGRAMMER_OK);
-}
-
-void test_runtime_start_proceeds_when_sw_ver_stays_bootloader()
-{
-   const std::vector<uint8_t> payload = { 0x01, 0x02, 0x03, 0x04 };
-   std::vector<uint8_t> softloader = append(make_header(0x000Bu, 0x1000u, 0x1000u, payload, 0xFFFFFFFFu), payload);
-
-   const uint32_t firmware_second_header = (uint32_t)(sizeof(NvmHeader2) + payload.size());
-   std::vector<uint8_t> firmware = append(make_header(0x0007u, 0x2000u, 0x2000u, payload, firmware_second_header), payload);
-   firmware = append(firmware, make_header(0x0004u, 0x3000u, 0x3000u, payload, 0xFFFFFFFFu));
-   firmware = append(firmware, payload);
-
-   const uint32_t pib_second_header = (uint32_t)(sizeof(NvmHeader2) + payload.size());
-   std::vector<uint8_t> pib = append(make_header(0x000Eu, 0x4000u, 0x4000u, payload, pib_second_header), payload);
-   pib = append(pib, make_header(0x000Fu, 0x5000u, 0x5000u, payload, 0xFFFFFFFFu));
-   pib = append(pib, payload);
-
-   EmbeddedImages images = {
-      { "softloader.nvm", softloader.data(), softloader.size() },
-      { "firmware.nvm", firmware.data(), firmware.size() },
-      { "evse.pib", pib.data(), pib.size() }
-   };
-
-   FakeTransport fake;
-   fake.sw_ver_bootloader_count = 1000;
-   EthernetTransport transport = { &fake, FakeTransport::send_frame, FakeTransport::receive_frame,
-                                   FakeTransport::delay_ms, FakeTransport::millis };
-   assert(run_programmer(images, transport) == PROGRAMMER_OK);
-}
 } // namespace
 
 int main()
@@ -590,7 +535,5 @@ int main()
    test_corrupt_payload_detection();
    test_firmware_lookup_with_nonzero_header_checksums();
    test_host_action_indication_is_acknowledged();
-   test_runtime_start_waits_past_bootloader_transition();
-   test_runtime_start_proceeds_when_sw_ver_stays_bootloader();
    return 0;
 }

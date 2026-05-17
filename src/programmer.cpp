@@ -14,7 +14,6 @@ constexpr uint16_t kMmtypeReq = 0x0000;
 constexpr uint16_t kMmtypeCnf = 0x0001;
 constexpr uint16_t kMmtypeInd = 0x0002;
 constexpr uint16_t kMmtypeRsp = 0x0003;
-constexpr uint16_t kImageTypeFirmware = 0x0004;
 constexpr uint16_t kImageTypeMemctl = 0x0007;
 constexpr uint16_t kImageTypeManifest = 0x000E;
 constexpr uint16_t kImageTypePib = 0x000F;
@@ -582,61 +581,6 @@ bool wait_for_start(MmeSession& session, char* version, size_t version_capacity)
    return false;
 }
 
-bool wait_for_runtime_start(MmeSession& session, char* version, size_t version_capacity)
-{
-   const uint32_t deadline = session.transport->millis(session.transport->context) + kStartTimeoutMs;
-   VsSwVerRequest* request = (VsSwVerRequest*)session.frame;
-   uint32_t attempts = 0u;
-
-   while ((int32_t)(deadline - session.transport->millis(session.transport->context)) >= 0)
-   {
-      attempts++;
-      status_running_light_update();
-      mem_set(session.frame, 0, sizeof(VsSwVerRequest));
-      build_ethernet_header(request->ethernet, session.peer, kHostMac);
-      build_qualcomm_header(request->qualcomm, (uint16_t)(kVsSwVer | kMmtypeReq));
-      if (!send_frame(session, sizeof(VsSwVerRequest)))
-         return false;
-
-      const int length = receive_matching(session, (uint16_t)(kVsSwVer | kMmtypeCnf), 250u);
-      if (length > 0)
-      {
-         const VsSwVerConfirm* confirm = (const VsSwVerConfirm*)session.response;
-         const size_t copy_length = confirm->mversion_length < version_capacity - 1u ?
-               confirm->mversion_length : version_capacity - 1u;
-         mem_set(version, 0, version_capacity);
-         mem_copy(version, confirm->mversion, copy_length);
-         mem_copy(session.peer, confirm->ethernet.source, sizeof(session.peer));
-         debug_puts("[MME] VS_SW_VER status=");
-         debug_put_u32_dec(confirm->mstatus);
-         debug_puts(" version=");
-         debug_puts(version);
-         debug_puts(" attempts=");
-         debug_put_u32_dec(attempts);
-         debug_puts("\r\n");
-         if (confirm->mstatus != 0u)
-            return false;
-         if (cstr_equal(version, "BootLoader"))
-            debug_puts("[MME] runtime still reports BootLoader; continuing\r\n");
-         return true;
-      }
-      else
-      {
-         debug_puts("[MME] VS_SW_VER retry len=");
-         debug_put_u32_dec((uint32_t)length);
-         debug_puts(" attempts=");
-         debug_put_u32_dec(attempts);
-         debug_puts("\r\n");
-      }
-      session.transport->delay_ms(session.transport->context, 50u);
-   }
-
-   debug_puts("[MME] runtime start timeout attempts=");
-   debug_put_u32_dec(attempts);
-   debug_puts("\r\n");
-   return false;
-}
-
 bool write_execute(MmeSession& session,
                    const uint8_t* data,
                    size_t length,
@@ -996,7 +940,6 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
       return PROGRAMMER_TRANSPORT_ERROR;
 
    ImageDescriptor memctl;
-   ImageDescriptor runtime;
    ImageDescriptor pib;
    ImageDescriptor pib_manifest;
    const uint8_t* pib_upload_data = images.pib.data;
@@ -1006,15 +949,12 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
    uint32_t pib_upload_entry = 0u;
    uint32_t pib_upload_checksum = checksum32(images.pib.data, images.pib.size, 0u);
 
-   if (!find_image(images.firmware, kImageTypeMemctl, memctl) ||
-       !find_image(images.firmware, kImageTypeFirmware, runtime))
+   if (!find_image(images.firmware, kImageTypeMemctl, memctl))
       return PROGRAMMER_INVALID_IMAGES;
 
    debug_log_image("memctl", memctl);
-   debug_log_image("runtime", runtime);
 
-   if (!validate_image_payload(images.firmware, memctl) ||
-       !validate_image_payload(images.firmware, runtime))
+   if (!validate_image_payload(images.firmware, memctl))
       return PROGRAMMER_INVALID_IMAGES;
 
    if (find_image(images.pib, kImageTypePib, pib) &&
@@ -1053,10 +993,8 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
    }
 
    const uint32_t memctl_length = le32_to_host(memctl.header.image_length);
-   const uint32_t runtime_length = le32_to_host(runtime.header.image_length);
 
    if (memctl.data_offset + memctl_length > images.firmware.size ||
-       runtime.data_offset + runtime_length > images.firmware.size ||
        pib_upload_length > images.pib.size)
       return PROGRAMMER_INVALID_IMAGES;
 
@@ -1093,23 +1031,7 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
                        false))
       return PROGRAMMER_PROTOCOL_ERROR;
 
-   if (!write_execute(session,
-                      images.firmware.data + runtime.data_offset,
-                      runtime_length,
-                      le32_to_host(runtime.header.image_address),
-                      runtime_length,
-                      le32_to_host(runtime.header.entry_point),
-                      le32_to_host(runtime.header.image_checksum),
-                      1u,
-                      true))
-      return PROGRAMMER_PROTOCOL_ERROR;
-
-   if (!wait_for_runtime_start(session, version, sizeof(version)))
-      return PROGRAMMER_TIMEOUT;
-   debug_puts("[PROGRAMMER] runtime version=");
-   debug_puts(version);
-   debug_puts("\r\n");
-   debug_puts("[PROGRAMMER] runtime ready, flashing modules\r\n");
+   debug_puts("[PROGRAMMER] flashing modules\r\n");
    if (!flash_softloader(session, images.softloader))
       return PROGRAMMER_PROTOCOL_ERROR;
    if (!flash_firmware_and_pib(session, images.firmware, images.pib))
