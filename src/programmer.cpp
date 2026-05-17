@@ -1040,31 +1040,6 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
                         false))
       return PROGRAMMER_PROTOCOL_ERROR;
 
-   if (!write_execute(session,
-                      images.firmware.data + runtime.data_offset,
-                      runtime_length,
-                      le32_to_host(runtime.header.image_address),
-                      runtime_length,
-                      le32_to_host(runtime.header.entry_point),
-                      le32_to_host(runtime.header.image_checksum),
-                      0u,
-                      true))
-      return PROGRAMMER_PROTOCOL_ERROR;
-
-   const uint32_t runtime_deadline = session.transport->millis(session.transport->context) + kStartTimeoutMs;
-   do
-   {
-      if (!wait_for_start(session, version, sizeof(version)))
-         return PROGRAMMER_TIMEOUT;
-      if (!cstr_equal(version, "BootLoader"))
-         break;
-      debug_puts("[MME] runtime still reports BootLoader, retry\r\n");
-      session.transport->delay_ms(session.transport->context, 50u);
-   } while ((int32_t)(runtime_deadline - session.transport->millis(session.transport->context)) >= 0);
-
-   if (cstr_equal(version, "BootLoader"))
-      return PROGRAMMER_TIMEOUT;
-
    debug_puts("[PROGRAMMER] flashing modules\r\n");
    if (!flash_softloader(session, images.softloader))
       return PROGRAMMER_PROTOCOL_ERROR;
