@@ -582,6 +582,60 @@ bool wait_for_start(MmeSession& session, char* version, size_t version_capacity)
    return false;
 }
 
+bool wait_for_runtime_start(MmeSession& session, char* version, size_t version_capacity)
+{
+   const uint32_t deadline = session.transport->millis(session.transport->context) + kStartTimeoutMs;
+   VsSwVerRequest* request = (VsSwVerRequest*)session.frame;
+   uint32_t attempts = 0u;
+
+   while ((int32_t)(deadline - session.transport->millis(session.transport->context)) >= 0)
+   {
+      attempts++;
+      status_running_light_update();
+      mem_set(session.frame, 0, sizeof(VsSwVerRequest));
+      build_ethernet_header(request->ethernet, session.peer, kHostMac);
+      build_qualcomm_header(request->qualcomm, (uint16_t)(kVsSwVer | kMmtypeReq));
+      if (!send_frame(session, sizeof(VsSwVerRequest)))
+         return false;
+
+      const int length = receive_matching(session, (uint16_t)(kVsSwVer | kMmtypeCnf), 250u);
+      if (length > 0)
+      {
+         const VsSwVerConfirm* confirm = (const VsSwVerConfirm*)session.response;
+         const size_t copy_length = confirm->mversion_length < version_capacity - 1u ?
+               confirm->mversion_length : version_capacity - 1u;
+         mem_set(version, 0, version_capacity);
+         mem_copy(version, confirm->mversion, copy_length);
+         mem_copy(session.peer, confirm->ethernet.source, sizeof(session.peer));
+         debug_puts("[MME] VS_SW_VER status=");
+         debug_put_u32_dec(confirm->mstatus);
+         debug_puts(" version=");
+         debug_puts(version);
+         debug_puts(" attempts=");
+         debug_put_u32_dec(attempts);
+         debug_puts("\r\n");
+         if (confirm->mstatus != 0u)
+            return false;
+         if (!cstr_equal(version, "BootLoader"))
+            return true;
+      }
+      else
+      {
+         debug_puts("[MME] VS_SW_VER retry len=");
+         debug_put_u32_dec((uint32_t)length);
+         debug_puts(" attempts=");
+         debug_put_u32_dec(attempts);
+         debug_puts("\r\n");
+      }
+      session.transport->delay_ms(session.transport->context, 50u);
+   }
+
+   debug_puts("[MME] runtime start timeout attempts=");
+   debug_put_u32_dec(attempts);
+   debug_puts("\r\n");
+   return false;
+}
+
 bool write_execute(MmeSession& session,
                    const uint8_t* data,
                    size_t length,
@@ -1049,16 +1103,11 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
                       true))
       return PROGRAMMER_PROTOCOL_ERROR;
 
-   if (!wait_for_start(session, version, sizeof(version)))
+   if (!wait_for_runtime_start(session, version, sizeof(version)))
       return PROGRAMMER_TIMEOUT;
    debug_puts("[PROGRAMMER] runtime version=");
    debug_puts(version);
    debug_puts("\r\n");
-   if (cstr_equal(version, "BootLoader"))
-   {
-      debug_puts("[PROGRAMMER] runtime did not start (still BootLoader)\r\n");
-      return PROGRAMMER_PROTOCOL_ERROR;
-   }
    debug_puts("[PROGRAMMER] runtime ready, flashing modules\r\n");
    if (!flash_softloader(session, images.softloader))
       return PROGRAMMER_PROTOCOL_ERROR;
