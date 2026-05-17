@@ -255,6 +255,33 @@ std::vector<uint8_t> make_header(uint32_t image_type, uint32_t image_address, ui
    return bytes;
 }
 
+std::vector<uint8_t> make_legacy_header(uint32_t image_type, uint32_t image_address, uint32_t entry_point,
+                                        const std::vector<uint8_t>& payload, uint32_t next_header,
+                                        uint32_t legacy_header_checksum)
+{
+   NvmHeader2 header = {};
+   header.major_version = host_to_le16(1u);
+   header.minor_version = host_to_le16(1u);
+   header.image_address = host_to_le32(image_address);
+   header.image_length = host_to_le32((uint32_t)payload.size());
+   header.image_checksum = host_to_le32(checksum32(payload.data(), payload.size(), 0u));
+   header.entry_point = host_to_le32(entry_point);
+   header.next_header = host_to_le32(next_header);
+   header.prev_header = host_to_le32(0xFFFFFFFFu);
+   header.image_type = host_to_le32(image_type);
+   header.header_checksum = host_to_le32(legacy_header_checksum);
+
+   const uint32_t checksum = checksum32(&header, sizeof(header) - sizeof(header.header_checksum), 0u);
+   const uint32_t current_xor = ~checksum;
+   const uint32_t adjust = current_xor ^ 0xFFFFFFFFu;
+   header.reserved11 = host_to_le32(adjust);
+   assert(checksum32(&header, sizeof(header) - sizeof(header.header_checksum), 0u) == 0u);
+
+   std::vector<uint8_t> bytes(sizeof(header));
+   mem_copy(bytes.data(), &header, sizeof(header));
+   return bytes;
+}
+
 std::vector<uint8_t> append(const std::vector<uint8_t>& lhs, const std::vector<uint8_t>& rhs)
 {
    std::vector<uint8_t> out = lhs;
@@ -377,6 +404,38 @@ void test_corrupt_payload_detection()
                                    FakeTransport::delay_ms, FakeTransport::millis };
    assert(run_programmer(images, transport) == PROGRAMMER_INVALID_IMAGES);
 }
+
+void test_firmware_lookup_with_nonzero_header_checksums()
+{
+   const std::vector<uint8_t> payload = { 0x01, 0x02, 0x03, 0x04 };
+   std::vector<uint8_t> softloader = append(make_header(0x000Bu, 0x1000u, 0x1000u, payload, 0xFFFFFFFFu), payload);
+
+   const uint32_t second = (uint32_t)(sizeof(NvmHeader2) + payload.size());
+   const uint32_t third = second + (uint32_t)(sizeof(NvmHeader2) + payload.size());
+
+   std::vector<uint8_t> firmware = append(make_header(0x000Eu, 0x1800u, 0x1800u, payload, second), payload);
+   firmware = append(firmware, make_legacy_header(0x0007u, 0x2000u, 0x2000u, payload, third, 0xEA00001Eu));
+   firmware = append(firmware, payload);
+   firmware = append(firmware, make_legacy_header(0x0004u, 0x3000u, 0x3000u, payload, 0xFFFFFFFFu, 0x00010001u));
+   firmware = append(firmware, payload);
+
+   const uint32_t pib_second = (uint32_t)(sizeof(NvmHeader2) + payload.size());
+   std::vector<uint8_t> pib = append(make_header(0x000Eu, 0x4000u, 0x4000u, payload, pib_second), payload);
+   pib = append(pib, make_header(0x000Fu, 0x5000u, 0x5000u, payload, 0xFFFFFFFFu));
+   pib = append(pib, payload);
+
+   EmbeddedImages images = {
+      { "softloader.nvm", softloader.data(), softloader.size() },
+      { "firmware.nvm", firmware.data(), firmware.size() },
+      { "evse.pib", pib.data(), pib.size() }
+   };
+
+   FakeTransport fake;
+   EthernetTransport transport = { &fake, FakeTransport::send_frame, FakeTransport::receive_frame,
+                                   FakeTransport::delay_ms, FakeTransport::millis };
+   const ProgrammerResult result = run_programmer(images, transport);
+   assert(result == PROGRAMMER_OK);
+}
 } // namespace
 
 int main()
@@ -385,5 +444,6 @@ int main()
    test_invalid_image_detection();
    test_raw_pib_detection();
    test_corrupt_payload_detection();
+   test_firmware_lookup_with_nonzero_header_checksums();
    return 0;
 }

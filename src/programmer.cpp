@@ -378,9 +378,14 @@ bool validate_nvm_header(const NvmHeader2& header)
       return false;
    if (le16_to_host(header.minor_version) != 1u)
       return false;
-   if (checksum32(&header, sizeof(header), 0) != 0u)
-      return false;
-   return true;
+
+   if (checksum32(&header, sizeof(header), 0u) == 0u)
+      return true;
+
+   if (checksum32(&header, sizeof(header) - sizeof(header.header_checksum), 0u) == 0u)
+      return true;
+
+   return false;
 }
 
 bool find_image(const EmbeddedImage& image, uint32_t image_type, ImageDescriptor& descriptor)
