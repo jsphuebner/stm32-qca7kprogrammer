@@ -289,6 +289,20 @@ void debug_put_u32_dec(uint32_t value)
       debug_putc(digits[count]);
 }
 
+void debug_put_mac(const uint8_t* mac)
+{
+   if (!mac)
+      return;
+   for (int i = 0; i < 6; i++)
+   {
+      if (i > 0)
+         debug_putc(':');
+      static const char kHex[] = "0123456789ABCDEF";
+      debug_putc(kHex[(mac[i] >> 4) & 0x0Fu]);
+      debug_putc(kHex[mac[i] & 0x0Fu]);
+   }
+}
+
 void debug_log_image(const char* label, const ImageDescriptor& descriptor)
 {
    debug_puts("[IMG] ");
@@ -426,7 +440,11 @@ int receive_matching(MmeSession& session, uint16_t expected_mmtype, uint32_t tim
                                                           remaining);
       if (length <= 0)
       {
-         debug_puts(length < 0 ? "[MME] receive error\r\n" : "[MME] receive timeout\r\n");
+         debug_puts(length < 0 ? "[MME] receive error expected=0x" : "[MME] receive timeout expected=0x");
+         debug_put_hex32((uint32_t)expected_mmtype);
+         debug_puts(" remaining=");
+         debug_put_u32_dec(remaining);
+         debug_puts("\r\n");
          return length;
       }
 
@@ -639,6 +657,10 @@ bool module_session(MmeSession& session, const ModuleSpec* modules, uint8_t modu
 {
    debug_puts("[FLASH] MODULE_SESSION modules=");
    debug_put_u32_dec(module_count);
+   debug_puts(" peer=");
+   debug_put_mac(session.peer);
+   debug_puts(" sid=0x");
+   debug_put_hex32(kCookie);
    debug_puts("\r\n");
    for (uint8_t index = 0; index < module_count; index++)
    {
@@ -668,12 +690,22 @@ bool module_session(MmeSession& session, const ModuleSpec* modules, uint8_t modu
 
    if (!send_frame(session, sizeof(VsModuleOperationStartRequest)))
       return false;
+   debug_puts("[FLASH] MODULE_SESSION request sent len=");
+   debug_put_u32_dec(sizeof(VsModuleOperationStartRequest));
+   debug_puts("\r\n");
 
    const int response_length = receive_matching(session,
                                                 (uint16_t)(kVsModuleOperation | kMmtypeCnf),
                                                 kModuleStartSessionTimeoutMs);
    if (response_length <= 0)
+   {
+      debug_puts("[FLASH] MODULE_SESSION no cnf len=");
+      debug_put_u32_dec((uint32_t)response_length);
+      debug_puts(" timeout=");
+      debug_put_u32_dec(kModuleStartSessionTimeoutMs);
+      debug_puts("\r\n");
       return false;
+   }
 
    const VsModuleOperationStartConfirm* confirm = (const VsModuleOperationStartConfirm*)session.response;
    debug_puts("[FLASH] MODULE_SESSION cnf status=0x");
