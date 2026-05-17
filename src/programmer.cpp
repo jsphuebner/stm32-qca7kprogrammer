@@ -14,6 +14,7 @@ constexpr uint16_t kMmtypeReq = 0x0000;
 constexpr uint16_t kMmtypeCnf = 0x0001;
 constexpr uint16_t kMmtypeInd = 0x0002;
 constexpr uint16_t kMmtypeRsp = 0x0003;
+constexpr uint16_t kImageTypeRuntime = 0x0004;
 constexpr uint16_t kImageTypeMemctl = 0x0007;
 constexpr uint16_t kImageTypeManifest = 0x000E;
 constexpr uint16_t kImageTypePib = 0x000F;
@@ -940,6 +941,7 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
       return PROGRAMMER_TRANSPORT_ERROR;
 
    ImageDescriptor memctl;
+   ImageDescriptor runtime;
    ImageDescriptor pib;
    ImageDescriptor pib_manifest;
    const uint8_t* pib_upload_data = images.pib.data;
@@ -951,10 +953,15 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
 
    if (!find_image(images.firmware, kImageTypeMemctl, memctl))
       return PROGRAMMER_INVALID_IMAGES;
+   if (!find_image(images.firmware, kImageTypeRuntime, runtime))
+      return PROGRAMMER_INVALID_IMAGES;
 
    debug_log_image("memctl", memctl);
+   debug_log_image("runtime", runtime);
 
    if (!validate_image_payload(images.firmware, memctl))
+      return PROGRAMMER_INVALID_IMAGES;
+   if (!validate_image_payload(images.firmware, runtime))
       return PROGRAMMER_INVALID_IMAGES;
 
    if (find_image(images.pib, kImageTypePib, pib) &&
@@ -993,8 +1000,10 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
    }
 
    const uint32_t memctl_length = le32_to_host(memctl.header.image_length);
+   const uint32_t runtime_length = le32_to_host(runtime.header.image_length);
 
    if (memctl.data_offset + memctl_length > images.firmware.size ||
+       runtime.data_offset + runtime_length > images.firmware.size ||
        pib_upload_length > images.pib.size)
       return PROGRAMMER_INVALID_IMAGES;
 
@@ -1027,9 +1036,34 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
                        pib_upload_total,
                        pib_upload_entry,
                        pib_upload_checksum,
-                       0u,
-                       false))
+                        0u,
+                        false))
       return PROGRAMMER_PROTOCOL_ERROR;
+
+   if (!write_execute(session,
+                      images.firmware.data + runtime.data_offset,
+                      runtime_length,
+                      le32_to_host(runtime.header.image_address),
+                      runtime_length,
+                      le32_to_host(runtime.header.entry_point),
+                      le32_to_host(runtime.header.image_checksum),
+                      0u,
+                      true))
+      return PROGRAMMER_PROTOCOL_ERROR;
+
+   const uint32_t runtime_deadline = session.transport->millis(session.transport->context) + kStartTimeoutMs;
+   do
+   {
+      if (!wait_for_start(session, version, sizeof(version)))
+         return PROGRAMMER_TIMEOUT;
+      if (!cstr_equal(version, "BootLoader"))
+         break;
+      debug_puts("[MME] runtime still reports BootLoader, retry\r\n");
+      session.transport->delay_ms(session.transport->context, 50u);
+   } while ((int32_t)(runtime_deadline - session.transport->millis(session.transport->context)) >= 0);
+
+   if (cstr_equal(version, "BootLoader"))
+      return PROGRAMMER_TIMEOUT;
 
    debug_puts("[PROGRAMMER] flashing modules\r\n");
    if (!flash_softloader(session, images.softloader))
