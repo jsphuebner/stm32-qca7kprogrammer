@@ -414,7 +414,11 @@ int handle_host_action_indication(MmeSession& session, const uint8_t* frame, siz
    if (qualcomm->mmv != kMmv || le16_to_host(mmtype) != (uint16_t)(kVsHostAction | kMmtypeInd))
       return 0;
 
-   debug_puts("[MME] host action ind -> rsp\r\n");
+   const uint8_t* payload = frame + sizeof(EthernetHeader) + sizeof(QualcommHeader);
+   const uint8_t action = (length >= sizeof(EthernetHeader) + sizeof(QualcommHeader) + 1u) ? payload[0] : 0xFFu;
+   debug_puts("[MME] host action ind action=0x");
+   debug_put_hex32(action);
+   debug_puts(" -> rsp\r\n");
    VsHostActionResponse* response = (VsHostActionResponse*)session.frame;
    mem_set(session.frame, 0, sizeof(VsHostActionResponse));
    build_ethernet_header(response->ethernet, ethernet->source, kHostMac);
@@ -638,24 +642,52 @@ bool write_execute(MmeSession& session,
 
       const VsWriteExecuteConfirm* confirm = (const VsWriteExecuteConfirm*)session.response;
       if (le32_to_host(confirm->client_session_id) != kCookie)
+      {
+         debug_puts("[FLASH] VS_WRITE_EXECUTE cnf bad session_id=0x");
+         debug_put_hex32(le32_to_host(confirm->client_session_id));
+         debug_puts("\r\n");
          return false;
+      }
       if (le32_to_host(confirm->mstatus) != 0u)
+      {
+         debug_puts("[FLASH] VS_WRITE_EXECUTE cnf mstatus=0x");
+         debug_put_hex32(le32_to_host(confirm->mstatus));
+         debug_puts(" off=0x");
+         debug_put_hex32(le32_to_host(confirm->current_part_offset));
+         debug_puts("\r\n");
          return false;
+      }
       if (le32_to_host(confirm->current_part_length) != chunk)
+      {
+         debug_puts("[FLASH] VS_WRITE_EXECUTE cnf bad len=");
+         debug_put_u32_dec(le32_to_host(confirm->current_part_length));
+         debug_puts(" expected=");
+         debug_put_u32_dec((uint32_t)chunk);
+         debug_puts("\r\n");
          return false;
+      }
       if (le32_to_host(confirm->current_part_offset) != offset)
+      {
+         debug_puts("[FLASH] VS_WRITE_EXECUTE cnf bad off=0x");
+         debug_put_hex32(le32_to_host(confirm->current_part_offset));
+         debug_puts(" expected=0x");
+         debug_put_hex32(offset);
+         debug_puts("\r\n");
          return false;
+      }
 
+      debug_puts("[FLASH] WE off=0x");
+      debug_put_hex32(offset);
+      debug_puts(" len=");
+      debug_put_u32_dec((uint32_t)chunk);
       if ((flags & kModuleFlagExecute) != 0u)
       {
-         debug_puts("[FLASH] VS_WRITE_EXECUTE execute cnf mstatus=0x");
-         debug_put_hex32(le32_to_host(confirm->mstatus));
-         debug_puts(" flags=0x");
+         debug_puts(" EXEC flags=0x");
          debug_put_hex32(le32_to_host(confirm->flags));
          debug_puts(" abs_start=0x");
          debug_put_hex32(le32_to_host(confirm->absolute_start_addr));
-         debug_puts("\r\n");
       }
+      debug_puts("\r\n");
 
       remaining -= chunk;
       offset += (uint32_t)chunk;
