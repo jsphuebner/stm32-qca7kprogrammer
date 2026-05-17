@@ -336,18 +336,39 @@ bool send_frame(MmeSession& session, size_t length)
 bool parse_mme(const uint8_t* frame, size_t length, uint16_t expected_mmtype)
 {
    if (length < sizeof(EthernetHeader) + sizeof(QualcommHeader))
+   {
+      debug_puts("[MME] drop short frame len=");
+      debug_put_u32_dec((uint32_t)length);
+      debug_puts("\r\n");
       return false;
+   }
 
    const EthernetHeader* ethernet = (const EthernetHeader*)frame;
    const QualcommHeader* qualcomm = (const QualcommHeader*)(frame + sizeof(EthernetHeader));
+   uint16_t ethernet_type;
    uint16_t mmtype;
+   mem_copy(&ethernet_type, &ethernet->type, sizeof(ethernet_type));
    mem_copy(&mmtype, &qualcomm->mmtype, sizeof(mmtype));
 
-   if (ethernet->type != host_to_be16(kEtherTypeHomePlug))
+   if (ethernet_type != host_to_be16(kEtherTypeHomePlug))
+   {
+      debug_puts("[MME] drop ethertype=0x");
+      debug_put_hex32((uint32_t)bswap16(ethernet_type));
+      debug_puts("\r\n");
       return false;
+   }
 
    if (le16_to_host(mmtype) != expected_mmtype)
+   {
+      debug_puts("[MME] drop mmtype expected=0x");
+      debug_put_hex32((uint32_t)expected_mmtype);
+      debug_puts(" got=0x");
+      debug_put_hex32((uint32_t)le16_to_host(mmtype));
+      debug_puts(" mmv=0x");
+      debug_put_hex32((uint32_t)qualcomm->mmv);
+      debug_puts("\r\n");
       return false;
+   }
 
    return true;
 }
@@ -365,12 +386,18 @@ int receive_matching(MmeSession& session, uint16_t expected_mmtype, uint32_t tim
                                                           sizeof(session.response),
                                                           remaining);
       if (length <= 0)
+      {
+         debug_puts(length < 0 ? "[MME] receive error\r\n" : "[MME] receive timeout\r\n");
          return length;
+      }
 
       if (parse_mme(session.response, (size_t)length, expected_mmtype))
          return length;
    }
 
+   debug_puts("[MME] wait timeout expected=0x");
+   debug_put_hex32((uint32_t)expected_mmtype);
+   debug_puts("\r\n");
    return 0;
 }
 
