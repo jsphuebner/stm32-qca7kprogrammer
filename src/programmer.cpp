@@ -253,6 +253,48 @@ struct ImageDescriptor
    size_t data_offset;
 };
 
+void debug_put_hex32(uint32_t value)
+{
+   static const char kHex[] = "0123456789ABCDEF";
+   for (int shift = 28; shift >= 0; shift -= 4)
+      debug_putc(kHex[(value >> shift) & 0xFu]);
+}
+
+void debug_put_u32_dec(uint32_t value)
+{
+   char digits[10];
+   int count = 0;
+   if (value == 0u)
+   {
+      debug_putc('0');
+      return;
+   }
+   while (value != 0u && count < (int)sizeof(digits))
+   {
+      digits[count++] = (char)('0' + (value % 10u));
+      value /= 10u;
+   }
+   while (count-- > 0)
+      debug_putc(digits[count]);
+}
+
+void debug_log_image(const char* label, const ImageDescriptor& descriptor)
+{
+   debug_puts("[IMG] ");
+   debug_puts(label);
+   debug_puts(" type=0x");
+   debug_put_hex32(le32_to_host(descriptor.header.image_type));
+   debug_puts(" addr=0x");
+   debug_put_hex32(le32_to_host(descriptor.header.image_address));
+   debug_puts(" len=");
+   debug_put_u32_dec(le32_to_host(descriptor.header.image_length));
+   debug_puts(" entry=0x");
+   debug_put_hex32(le32_to_host(descriptor.header.entry_point));
+   debug_puts(" csum=0x");
+   debug_put_hex32(le32_to_host(descriptor.header.image_checksum));
+   debug_puts("\r\n");
+}
+
 struct MmeSession
 {
    const EthernetTransport* transport;
@@ -432,6 +474,18 @@ bool write_execute(MmeSession& session,
                    uint8_t allowed_mem_type,
                    bool execute_on_last)
 {
+   debug_puts("[FLASH] VS_WRITE_EXECUTE len=");
+   debug_put_u32_dec((uint32_t)length);
+   debug_puts(" total=");
+   debug_put_u32_dec(total_length);
+   debug_puts(" start=0x");
+   debug_put_hex32(start_offset);
+   debug_puts(" entry=0x");
+   debug_put_hex32(entry_point);
+   debug_puts(" mem=");
+   debug_put_u32_dec(allowed_mem_type);
+   debug_puts("\r\n");
+
    uint32_t offset = start_offset;
    size_t remaining = length;
 
@@ -487,6 +541,10 @@ bool write_execute(MmeSession& session,
 
 bool module_session(MmeSession& session, const ModuleSpec* modules, uint8_t module_count)
 {
+   debug_puts("[FLASH] MODULE_SESSION modules=");
+   debug_put_u32_dec(module_count);
+   debug_puts("\r\n");
+
    VsModuleOperationStartRequest* request = (VsModuleOperationStartRequest*)session.frame;
    mem_set(session.frame, 0, sizeof(VsModuleOperationStartRequest));
    build_ethernet_header(request->ethernet, session.peer, kHostMac);
@@ -519,6 +577,16 @@ bool module_session(MmeSession& session, const ModuleSpec* modules, uint8_t modu
 
 bool module_write(MmeSession& session, const EmbeddedImage& image, uint8_t module_index, const ModuleSpec& spec)
 {
+   debug_puts("[FLASH] MODULE_WRITE idx=");
+   debug_put_u32_dec(module_index);
+   debug_puts(" id=0x");
+   debug_put_hex32(le16_to_host(spec.module_id));
+   debug_puts(" len=");
+   debug_put_u32_dec((uint32_t)image.size);
+   debug_puts(" csum=0x");
+   debug_put_hex32(spec.module_checksum);
+   debug_puts("\r\n");
+
    size_t remaining = image.size;
    uint32_t offset = 0u;
 
@@ -571,6 +639,8 @@ bool module_write(MmeSession& session, const EmbeddedImage& image, uint8_t modul
 
 bool module_commit(MmeSession& session)
 {
+   debug_puts("[FLASH] MODULE_COMMIT\r\n");
+
    VsModuleOperationCommitRequest* request = (VsModuleOperationCommitRequest*)session.frame;
    mem_set(session.frame, 0, sizeof(VsModuleOperationCommitRequest));
    build_ethernet_header(request->ethernet, session.peer, kHostMac);
@@ -617,6 +687,7 @@ bool reset_device(MmeSession& session)
 
 bool flash_softloader(MmeSession& session, const EmbeddedImage& image)
 {
+   debug_puts("[FLASH] softloader module start\r\n");
    ModuleSpec spec;
    if (!compute_module_spec(image, spec, kModuleIdSoftloader))
       return false;
@@ -629,6 +700,7 @@ bool flash_softloader(MmeSession& session, const EmbeddedImage& image)
 
 bool flash_firmware_and_pib(MmeSession& session, const EmbeddedImage& firmware, const EmbeddedImage& pib)
 {
+   debug_puts("[FLASH] firmware+pib module start\r\n");
    ModuleSpec specs[2];
    if (!compute_module_spec(pib, specs[0], kModuleIdParameters))
       return false;
@@ -647,6 +719,7 @@ bool flash_firmware_and_pib(MmeSession& session, const EmbeddedImage& firmware, 
 ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTransport& transport)
 {
    status_running_light_update();
+   debug_puts("[PROGRAMMER] start\r\n");
 
    if (!transport.send_frame || !transport.receive_frame || !transport.delay_ms || !transport.millis)
       return PROGRAMMER_TRANSPORT_ERROR;
@@ -666,6 +739,9 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
        !find_image(images.firmware, kImageTypeFirmware, runtime))
       return PROGRAMMER_INVALID_IMAGES;
 
+   debug_log_image("memctl", memctl);
+   debug_log_image("runtime", runtime);
+
    if (!validate_image_payload(images.firmware, memctl) ||
        !validate_image_payload(images.firmware, runtime))
       return PROGRAMMER_INVALID_IMAGES;
@@ -675,6 +751,8 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
        validate_image_payload(images.pib, pib) &&
        validate_image_payload(images.pib, pib_manifest))
    {
+      debug_log_image("pib", pib);
+      debug_log_image("pib_manifest", pib_manifest);
       const uint32_t pib_length = le32_to_host(pib.header.image_length);
       const uint32_t pib_transfer_length = (uint32_t)(sizeof(NvmHeader2) +
             le32_to_host(pib_manifest.header.image_length) + sizeof(NvmHeader2) + pib_length);
@@ -688,10 +766,19 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
       pib_upload_total = pib_length;
       pib_upload_entry = le32_to_host(pib.header.entry_point);
       pib_upload_checksum = le32_to_host(pib.header.image_checksum);
+      debug_puts("[IMG] pib source=nvm-wrapped\r\n");
    }
    else if (images.pib.size == 0u || images.pib.size > 0xFFFFFFFFu)
    {
       return PROGRAMMER_INVALID_IMAGES;
+   }
+   else
+   {
+      debug_puts("[IMG] pib source=raw len=");
+      debug_put_u32_dec((uint32_t)images.pib.size);
+      debug_puts(" csum=0x");
+      debug_put_hex32(pib_upload_checksum);
+      debug_puts("\r\n");
    }
 
    const uint32_t memctl_length = le32_to_host(memctl.header.image_length);
@@ -711,6 +798,7 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
       return PROGRAMMER_TIMEOUT;
    if (!cstr_equal(version, "BootLoader"))
       return PROGRAMMER_PROTOCOL_ERROR;
+   debug_puts("[PROGRAMMER] bootloader ready\r\n");
 
    if (!write_execute(session,
                       images.firmware.data + memctl.data_offset,
@@ -747,6 +835,7 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
 
    if (!wait_for_start(session, version, sizeof(version)))
       return PROGRAMMER_TIMEOUT;
+   debug_puts("[PROGRAMMER] runtime ready, flashing modules\r\n");
    if (!flash_softloader(session, images.softloader))
       return PROGRAMMER_PROTOCOL_ERROR;
    if (!flash_firmware_and_pib(session, images.firmware, images.pib))
@@ -755,6 +844,7 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
       return PROGRAMMER_PROTOCOL_ERROR;
    if (!wait_for_start(session, version, sizeof(version)))
       return PROGRAMMER_TIMEOUT;
+   debug_puts("[PROGRAMMER] done\r\n");
 
    return PROGRAMMER_OK;
 }
