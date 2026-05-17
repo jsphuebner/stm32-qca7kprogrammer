@@ -14,10 +14,11 @@ MKDIR_P     = mkdir -p
 COMMON_INCLUDES = -Iinclude
 FW_INCLUDES     = $(COMMON_INCLUDES) -Ilibopencm3/include
 COMMON_WARNINGS = -Wall -Wextra -Werror -pedantic
+FW_DEFINES      = -DSTM32F1
 FREESTANDING    = -ffreestanding -fno-builtin -fno-unwind-tables
 FREESTANDING_CPP= -fno-exceptions -fno-rtti -fno-threadsafe-statics
-FW_CFLAGS       = -Os $(COMMON_WARNINGS) $(FW_INCLUDES) $(FREESTANDING) -mcpu=cortex-m3 -mthumb -std=gnu11
-FW_CPPFLAGS     = -Os $(COMMON_WARNINGS) $(FW_INCLUDES) $(FREESTANDING) $(FREESTANDING_CPP) -mcpu=cortex-m3 -mthumb -std=c++17
+FW_CFLAGS       = -Os $(COMMON_WARNINGS) $(FW_INCLUDES) $(FW_DEFINES) $(FREESTANDING) -mcpu=cortex-m3 -mthumb -std=gnu11
+FW_CPPFLAGS     = -Os $(COMMON_WARNINGS) $(FW_INCLUDES) $(FW_DEFINES) $(FREESTANDING) $(FREESTANDING_CPP) -mcpu=cortex-m3 -mthumb -std=c++17
 FW_LDFLAGS      = -nostdlib -Wl,--gc-sections,-Map,$(OUT_DIR)/$(BINARY).map -Tstm32_qca7kprogrammer.ld
 HOST_FLAGS      = -O2 $(COMMON_WARNINGS) $(COMMON_INCLUDES) -DHOST_BUILD -std=c++17
 HOST_CFLAGS     = -O2 $(COMMON_WARNINGS) $(COMMON_INCLUDES) -DHOST_BUILD -std=gnu11
@@ -48,6 +49,10 @@ check-cross-tools:
 
 check-libopencm3:
 	@test -d libopencm3/include || (echo "Missing libopencm3 submodule. Run: git submodule update --init --recursive" && exit 1)
+
+get-deps:
+	git submodule update --init --recursive
+	$(MAKE) -C libopencm3 TARGETS=stm32/f1
 
 $(OUT_DIR) $(HOST_DIR):
 	$(MKDIR_P) $@
@@ -83,4 +88,4 @@ $(HOST_DIR)/programmer_tests: $(HOST_OBJS)
 clean:
 	rm -rf build
 
-.PHONY: all clean firmware test check-cross-tools check-libopencm3
+.PHONY: all clean firmware test check-cross-tools check-libopencm3 get-deps

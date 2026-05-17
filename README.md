@@ -31,12 +31,13 @@ Placeholder files are committed so the project builds. Replace them with the rea
 ## Targets
 
 - `make test` runs native protocol tests and syntax-checks the firmware sources in `HOST_BUILD` mode.
+- `make get-deps` initializes git submodules and builds libopencm3 for `stm32/f1`.
 - `make firmware` builds the bare-metal STM32 image when `arm-none-eabi-*` tools are installed.
 
-Before firmware builds, initialize submodules so `libopencm3` headers are available:
+Before firmware builds, prepare dependencies:
 
 ```sh
-git submodule update --init --recursive
+make get-deps
 ```
 
 ## Notes
