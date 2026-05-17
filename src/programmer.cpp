@@ -646,6 +646,17 @@ bool write_execute(MmeSession& session,
       if (le32_to_host(confirm->current_part_offset) != offset)
          return false;
 
+      if ((flags & kModuleFlagExecute) != 0u)
+      {
+         debug_puts("[FLASH] VS_WRITE_EXECUTE execute cnf mstatus=0x");
+         debug_put_hex32(le32_to_host(confirm->mstatus));
+         debug_puts(" flags=0x");
+         debug_put_hex32(le32_to_host(confirm->flags));
+         debug_puts(" abs_start=0x");
+         debug_put_hex32(le32_to_host(confirm->absolute_start_addr));
+         debug_puts("\r\n");
+      }
+
       remaining -= chunk;
       offset += (uint32_t)chunk;
    }
@@ -681,12 +692,20 @@ bool module_session(MmeSession& session, const ModuleSpec* modules, uint8_t modu
    build_qualcomm_header(request->qualcomm, (uint16_t)(kVsModuleOperation | kMmtypeReq));
    request->num_op_data = 1u;
    request->module_spec.mod_op = host_to_le16(kModuleOpStartSession);
-   request->module_spec.mod_op_data_len = host_to_le16((uint16_t)(sizeof(request->module_spec) +
+   request->module_spec.mod_op_data_len = host_to_le16((uint16_t)(sizeof(request->module_spec) - 4u +
          module_count * sizeof(ModuleSpec)));
    request->module_spec.mod_op_session_id = host_to_le32(kCookie);
    request->module_spec.num_modules = module_count;
    for (uint8_t index = 0; index < module_count; index++)
       request->modules[index] = modules[index];
+
+   debug_puts("[FLASH] MODULE_SESSION start mod_op=0x");
+   debug_put_hex32(kModuleOpStartSession);
+   debug_puts(" mod_op_data_len=");
+   debug_put_u32_dec(le16_to_host(request->module_spec.mod_op_data_len));
+   debug_puts(" num_modules=");
+   debug_put_u32_dec(module_count);
+   debug_puts("\r\n");
 
    if (!send_frame(session, sizeof(VsModuleOperationStartRequest)))
       return false;
@@ -742,14 +761,14 @@ bool module_write(MmeSession& session, const EmbeddedImage& image, uint8_t modul
       mem_set(session.frame, 0, sizeof(VsModuleOperationWriteRequest));
       build_ethernet_header(request->ethernet, session.peer, kHostMac);
       build_qualcomm_header(request->qualcomm, (uint16_t)(kVsModuleOperation | kMmtypeReq));
+      const size_t chunk = remaining > kModuleChunk ? kModuleChunk : remaining;
       request->num_op_data = 1u;
       request->module_spec.mod_op = host_to_le16(kModuleOpWriteModule);
-      request->module_spec.mod_op_data_len = host_to_le16((uint16_t)(sizeof(request->module_spec) + kModuleChunk));
+      request->module_spec.mod_op_data_len = host_to_le16((uint16_t)(sizeof(request->module_spec) - 4u + chunk));
       request->module_spec.mod_op_session_id = host_to_le32(kCookie);
       request->module_spec.module_idx = module_index;
       request->module_spec.module_id = spec.module_id;
       request->module_spec.module_sub_id = spec.module_sub_id;
-      const size_t chunk = remaining > kModuleChunk ? kModuleChunk : remaining;
       request->module_spec.module_length = host_to_le16((uint16_t)chunk);
       request->module_spec.module_offset = host_to_le32(offset);
       mem_copy(request->module_data, image.data + offset, chunk);
@@ -801,7 +820,7 @@ bool module_commit(MmeSession& session)
    build_qualcomm_header(request->qualcomm, (uint16_t)(kVsModuleOperation | kMmtypeReq));
    request->num_op_data = 1u;
    request->request.mod_op = host_to_le16(kModuleOpCloseSession);
-   request->request.mod_op_data_len = host_to_le16((uint16_t)(sizeof(request->request) + sizeof(request->reserved2)));
+   request->request.mod_op_data_len = host_to_le16((uint16_t)(sizeof(request->request) - 4u + sizeof(request->reserved2)));
    request->request.mod_op_session_id = host_to_le32(kCookie);
    request->request.commit_code = host_to_le32(kCommitFlags);
 
@@ -1000,6 +1019,14 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
 
    if (!wait_for_start(session, version, sizeof(version)))
       return PROGRAMMER_TIMEOUT;
+   debug_puts("[PROGRAMMER] runtime version=");
+   debug_puts(version);
+   debug_puts("\r\n");
+   if (cstr_equal(version, "BootLoader"))
+   {
+      debug_puts("[PROGRAMMER] runtime did not start (still BootLoader)\r\n");
+      return PROGRAMMER_PROTOCOL_ERROR;
+   }
    debug_puts("[PROGRAMMER] runtime ready, flashing modules\r\n");
    if (!flash_softloader(session, images.softloader))
       return PROGRAMMER_PROTOCOL_ERROR;
