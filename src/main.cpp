@@ -11,7 +11,7 @@ extern "C" int main(void)
 
    ProgrammerResult result = PROGRAMMER_TRANSPORT_ERROR;
    if (qca7005_read_signature(&transport) == 0xAA55u)
-      result = run_programmer(g_embedded_images, qca7005_make_transport(&transport));
+      result = run_programmer(embedded_images(), qca7005_make_transport(&transport));
 
    while (1)
    {

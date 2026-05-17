@@ -18,6 +18,6 @@ struct EmbeddedImages
    EmbeddedImage pib;
 };
 
-extern const EmbeddedImages g_embedded_images;
+const EmbeddedImages& embedded_images(void);
 
 #endif
