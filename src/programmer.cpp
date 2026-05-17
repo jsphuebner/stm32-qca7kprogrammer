@@ -515,9 +515,11 @@ bool wait_for_start(MmeSession& session, char* version, size_t version_capacity)
 {
    const uint32_t deadline = session.transport->millis(session.transport->context) + kStartTimeoutMs;
    VsSwVerRequest* request = (VsSwVerRequest*)session.frame;
+   uint32_t attempts = 0u;
 
    while ((int32_t)(deadline - session.transport->millis(session.transport->context)) >= 0)
    {
+      attempts++;
       status_running_light_update();
       mem_set(session.frame, 0, sizeof(VsSwVerRequest));
       build_ethernet_header(request->ethernet, session.peer, kHostMac);
@@ -534,12 +536,27 @@ bool wait_for_start(MmeSession& session, char* version, size_t version_capacity)
          mem_set(version, 0, version_capacity);
          mem_copy(version, confirm->mversion, copy_length);
          mem_copy(session.peer, confirm->ethernet.source, sizeof(session.peer));
+         debug_puts("[MME] VS_SW_VER status=");
+         debug_put_u32_dec(confirm->mstatus);
+         debug_puts(" version=");
+         debug_puts(version);
+         debug_puts(" attempts=");
+         debug_put_u32_dec(attempts);
+         debug_puts("\r\n");
          return confirm->mstatus == 0u;
       }
 
+      debug_puts("[MME] VS_SW_VER retry len=");
+      debug_put_u32_dec((uint32_t)length);
+      debug_puts(" attempts=");
+      debug_put_u32_dec(attempts);
+      debug_puts("\r\n");
       session.transport->delay_ms(session.transport->context, 50u);
    }
 
+   debug_puts("[MME] VS_SW_VER start timeout attempts=");
+   debug_put_u32_dec(attempts);
+   debug_puts("\r\n");
    return false;
 }
 
@@ -623,6 +640,18 @@ bool module_session(MmeSession& session, const ModuleSpec* modules, uint8_t modu
    debug_puts("[FLASH] MODULE_SESSION modules=");
    debug_put_u32_dec(module_count);
    debug_puts("\r\n");
+   for (uint8_t index = 0; index < module_count; index++)
+   {
+      debug_puts("[FLASH] MODULE_SESSION spec idx=");
+      debug_put_u32_dec(index);
+      debug_puts(" id=0x");
+      debug_put_hex32(le16_to_host(modules[index].module_id));
+      debug_puts(" len=");
+      debug_put_u32_dec(le32_to_host(modules[index].module_length));
+      debug_puts(" csum=0x");
+      debug_put_hex32(modules[index].module_checksum);
+      debug_puts("\r\n");
+   }
 
    VsModuleOperationStartRequest* request = (VsModuleOperationStartRequest*)session.frame;
    mem_set(session.frame, 0, sizeof(VsModuleOperationStartRequest));
@@ -640,13 +669,20 @@ bool module_session(MmeSession& session, const ModuleSpec* modules, uint8_t modu
    if (!send_frame(session, sizeof(VsModuleOperationStartRequest)))
       return false;
 
-    const int response_length = receive_matching(session,
-                                                 (uint16_t)(kVsModuleOperation | kMmtypeCnf),
-                                                 kModuleStartSessionTimeoutMs);
+   const int response_length = receive_matching(session,
+                                                (uint16_t)(kVsModuleOperation | kMmtypeCnf),
+                                                kModuleStartSessionTimeoutMs);
    if (response_length <= 0)
       return false;
 
    const VsModuleOperationStartConfirm* confirm = (const VsModuleOperationStartConfirm*)session.response;
+   debug_puts("[FLASH] MODULE_SESSION cnf status=0x");
+   debug_put_hex32(le16_to_host(confirm->mstatus));
+   debug_puts(" op=0x");
+   debug_put_hex32(le16_to_host(confirm->module_spec.mod_op));
+   debug_puts(" sid=0x");
+   debug_put_hex32(le32_to_host(confirm->module_spec.mod_op_session_id));
+   debug_puts("\r\n");
    return le16_to_host(confirm->mstatus) == 0u &&
           le16_to_host(confirm->module_spec.mod_op) == kModuleOpStartSession &&
           le32_to_host(confirm->module_spec.mod_op_session_id) == kCookie;
@@ -696,6 +732,15 @@ bool module_write(MmeSession& session, const EmbeddedImage& image, uint8_t modul
          return false;
 
       const VsModuleOperationWriteConfirm* confirm = (const VsModuleOperationWriteConfirm*)session.response;
+      debug_puts("[FLASH] MODULE_WRITE cnf status=0x");
+      debug_put_hex32(le16_to_host(confirm->mstatus));
+      debug_puts(" idx=");
+      debug_put_u32_dec(confirm->module_spec.module_idx);
+      debug_puts(" len=");
+      debug_put_u32_dec(le16_to_host(confirm->module_spec.module_length));
+      debug_puts(" off=");
+      debug_put_u32_dec(le32_to_host(confirm->module_spec.module_offset));
+      debug_puts("\r\n");
       if (le16_to_host(confirm->mstatus) != 0u)
          return false;
       if (le16_to_host(confirm->module_spec.mod_op) != kModuleOpWriteModule)
@@ -738,6 +783,13 @@ bool module_commit(MmeSession& session)
       return false;
 
    const VsModuleOperationCommitConfirm* confirm = (const VsModuleOperationCommitConfirm*)session.response;
+   debug_puts("[FLASH] MODULE_COMMIT cnf status=0x");
+   debug_put_hex32(le16_to_host(confirm->mstatus));
+   debug_puts(" op=0x");
+   debug_put_hex32(le16_to_host(confirm->confirm.mod_op));
+   debug_puts(" sid=0x");
+   debug_put_hex32(le32_to_host(confirm->confirm.mod_op_session_id));
+   debug_puts("\r\n");
    return le16_to_host(confirm->mstatus) == 0u &&
           le16_to_host(confirm->confirm.mod_op) == kModuleOpCloseSession &&
           le32_to_host(confirm->confirm.mod_op_session_id) == kCookie;
@@ -745,6 +797,7 @@ bool module_commit(MmeSession& session)
 
 bool reset_device(MmeSession& session)
 {
+   debug_puts("[FLASH] RESET_DEVICE\r\n");
    VsRsDevRequest* request = (VsRsDevRequest*)session.frame;
    mem_set(session.frame, 0, sizeof(VsRsDevRequest));
    build_ethernet_header(request->ethernet, session.peer, kHostMac);
@@ -759,6 +812,9 @@ bool reset_device(MmeSession& session)
       return false;
 
    const VsRsDevConfirm* confirm = (const VsRsDevConfirm*)session.response;
+   debug_puts("[FLASH] RESET_DEVICE cnf status=");
+   debug_put_u32_dec(confirm->mstatus);
+   debug_puts("\r\n");
    return confirm->mstatus == 0u;
 }
 
