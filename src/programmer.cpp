@@ -340,11 +340,13 @@ bool parse_mme(const uint8_t* frame, size_t length, uint16_t expected_mmtype)
 
    const EthernetHeader* ethernet = (const EthernetHeader*)frame;
    const QualcommHeader* qualcomm = (const QualcommHeader*)(frame + sizeof(EthernetHeader));
+   uint16_t mmtype;
+   mem_copy(&mmtype, &qualcomm->mmtype, sizeof(mmtype));
 
    if (ethernet->type != host_to_be16(kEtherTypeHomePlug))
       return false;
 
-   if (qualcomm->mmtype != host_to_le16(expected_mmtype))
+   if (le16_to_host(mmtype) != expected_mmtype)
       return false;
 
    return true;
