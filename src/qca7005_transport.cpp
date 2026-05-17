@@ -144,7 +144,7 @@ void qca7005_setup(Qca7005Transport*)
    gpio_setup();
    spi_setup();
    debug_uart_setup();
-   systick_setup(8000000u);
+   systick_setup(72000000u);
 }
 
 uint16_t qca7005_read_signature(Qca7005Transport* transport)
