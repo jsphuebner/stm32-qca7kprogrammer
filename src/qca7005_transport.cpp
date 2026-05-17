@@ -3,38 +3,25 @@
 #include "hwinit.h"
 
 #ifndef HOST_BUILD
+#include <libopencm3/stm32/gpio.h>
+#include <libopencm3/stm32/spi.h>
 namespace {
-constexpr uintptr_t GPIOA_BASE = 0x40010800u;
-constexpr uintptr_t SPI1_BASE = 0x40013000u;
-constexpr uintptr_t GPIOA_BSRR = GPIOA_BASE + 0x10u;
-constexpr uintptr_t SPI1_SR = SPI1_BASE + 0x08u;
-constexpr uintptr_t SPI1_DR = SPI1_BASE + 0x0Cu;
 constexpr uint8_t kSpiReadSignature = 0xDAu;
 constexpr uint8_t kSpiWriteBfrSize = 0x41u;
 constexpr uint8_t kSpiReadRxAvailable = 0xC3u;
 constexpr size_t kQcaFrameOverhead = 12u;
 
-inline volatile uint32_t& reg32(uintptr_t address)
-{
-   return *(volatile uint32_t*)address;
-}
-
 void chip_select(bool asserted)
 {
    if (asserted)
-      reg32(GPIOA_BSRR) = (1u << (4 + 16));
+      gpio_clear(GPIOA, GPIO4);
    else
-      reg32(GPIOA_BSRR) = (1u << 4);
+      gpio_set(GPIOA, GPIO4);
 }
 
 uint8_t spi_transfer(uint8_t value)
 {
-   while ((reg32(SPI1_SR) & (1u << 1)) == 0u)
-      ;
-   reg32(SPI1_DR) = value;
-   while ((reg32(SPI1_SR) & (1u << 0)) == 0u)
-      ;
-   return (uint8_t)reg32(SPI1_DR);
+   return (uint8_t)spi_xfer(SPI1, value);
 }
 
 void spi_exchange(uint8_t* rx, const uint8_t* tx, size_t length)
@@ -42,7 +29,7 @@ void spi_exchange(uint8_t* rx, const uint8_t* tx, size_t length)
    chip_select(true);
    for (size_t index = 0; index < length; index++)
       rx[index] = spi_transfer(tx[index]);
-   while ((reg32(SPI1_SR) & (1u << 7)) != 0u)
+   while ((SPI_SR(SPI1) & SPI_SR_BSY) != 0u)
       ;
    chip_select(false);
 }

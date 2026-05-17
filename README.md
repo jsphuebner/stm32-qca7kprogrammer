@@ -33,8 +33,17 @@ Placeholder files are committed so the project builds. Replace them with the rea
 - `make test` runs native protocol tests and syntax-checks the firmware sources in `HOST_BUILD` mode.
 - `make firmware` builds the bare-metal STM32 image when `arm-none-eabi-*` tools are installed.
 
+Before firmware builds, initialize submodules so `libopencm3` headers are available:
+
+```sh
+git submodule update --init --recursive
+```
+
 ## Notes
 
 - The firmware is written in a small standalone style similar to [`stm32-CANBootloader`](https://github.com/jsphuebner/stm32-CANBootloader): a compact Makefile-based STM32 project with minimal startup code and application logic kept in a few focused source files.
 - The current hardware setup targets an STM32F103 with QCA7005 on SPI1 (`PA4` CS, `PA5` SCK, `PA6` MISO, `PA7` MOSI).
 - The placeholder asset contents are not valid QCA images; flashing only works after replacing them with the real files.
+- Startup LED patterns:
+  - `PROGRAMMER_OK`: slow 1 Hz blink.
+  - Errors: short blink count indicates `ProgrammerResult + 1`.

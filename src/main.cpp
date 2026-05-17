@@ -9,21 +9,29 @@ extern "C" int main(void)
    Qca7005Transport transport;
    qca7005_setup(&transport);
 
-   bool finished = false;
+   ProgrammerResult result = PROGRAMMER_TRANSPORT_ERROR;
    if (qca7005_read_signature(&transport) == 0xAA55u)
-   {
-      (void)run_programmer(g_embedded_images, qca7005_make_transport(&transport));
-      finished = true;
-   }
+      result = run_programmer(g_embedded_images, qca7005_make_transport(&transport));
 
    while (1)
    {
-      if (!finished)
+      if (result == PROGRAMMER_OK)
+      {
+         led_set_all(true);
+         delay_ms(1000u);
+         led_set_all(false);
+         delay_ms(1000u);
          continue;
+      }
 
-      led_set_all(true);
-      delay_ms(1000u);
-      led_set_all(false);
+      const uint32_t blink_count = (uint32_t)result + 1u;
+      for (uint32_t blink = 0; blink < blink_count; blink++)
+      {
+         led_set_all(true);
+         delay_ms(180u);
+         led_set_all(false);
+         delay_ms(220u);
+      }
       delay_ms(1000u);
    }
 

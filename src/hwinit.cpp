@@ -2,42 +2,21 @@
 #include <stddef.h>
 
 #ifndef HOST_BUILD
+#include <libopencm3/cm3/systick.h>
+#include <libopencm3/stm32/gpio.h>
+#include <libopencm3/stm32/rcc.h>
+#include <libopencm3/stm32/spi.h>
+#include <libopencm3/stm32/usart.h>
 namespace {
 volatile uint32_t g_millis = 0;
-
-constexpr uintptr_t RCC_BASE = 0x40021000u;
-constexpr uintptr_t GPIOA_BASE = 0x40010800u;
-constexpr uintptr_t USART1_BASE = 0x40013800u;
-constexpr uintptr_t SPI1_BASE = 0x40013000u;
-constexpr uintptr_t SYSTICK_BASE = 0xE000E010u;
-
-inline volatile uint32_t& reg32(uintptr_t address)
-{
-   return *(volatile uint32_t*)address;
-}
-
-constexpr uintptr_t RCC_APB2ENR = RCC_BASE + 0x18u;
-constexpr uintptr_t GPIOA_CRL = GPIOA_BASE + 0x00u;
-constexpr uintptr_t GPIOA_CRH = GPIOA_BASE + 0x04u;
-constexpr uintptr_t GPIOA_BSRR = GPIOA_BASE + 0x10u;
-constexpr uintptr_t USART1_SR = USART1_BASE + 0x00u;
-constexpr uintptr_t USART1_DR = USART1_BASE + 0x04u;
-constexpr uintptr_t USART1_BRR = USART1_BASE + 0x08u;
-constexpr uintptr_t USART1_CR1 = USART1_BASE + 0x0Cu;
-constexpr uintptr_t SPI1_CR1 = SPI1_BASE + 0x00u;
-constexpr uintptr_t SYSTICK_CSR = SYSTICK_BASE + 0x00u;
-constexpr uintptr_t SYSTICK_RVR = SYSTICK_BASE + 0x04u;
-constexpr uintptr_t SYSTICK_CVR = SYSTICK_BASE + 0x08u;
-constexpr uint32_t kLedAlivePin = 0u;
-constexpr uint32_t kStatecOutPin = 1u;
-constexpr uint32_t kContactOutPin = 2u;
-constexpr uint32_t kLedPinsMask = (1u << kLedAlivePin) | (1u << kStatecOutPin) | (1u << kContactOutPin);
+constexpr uint16_t kLedPinsMask = GPIO0 | GPIO1 | GPIO2;
 
 void set_led_mask(uint32_t on_mask)
 {
-   const uint32_t set_bits = kLedPinsMask & on_mask;
-   const uint32_t reset_bits = (kLedPinsMask & ~on_mask) << 16;
-   reg32(GPIOA_BSRR) = set_bits | reset_bits;
+   const uint16_t set_bits = (uint16_t)(kLedPinsMask & (uint16_t)on_mask);
+   const uint16_t clear_bits = (uint16_t)(kLedPinsMask & (uint16_t)~on_mask);
+   gpio_set(GPIOA, set_bits);
+   gpio_clear(GPIOA, clear_bits);
 }
 }
 
@@ -48,47 +27,55 @@ extern "C" void SysTick_Handler(void)
 
 void clock_setup(void)
 {
-   reg32(RCC_APB2ENR) |= (1u << 0) | (1u << 2) | (1u << 12) | (1u << 14);
+   rcc_periph_clock_enable(RCC_AFIO);
+   rcc_periph_clock_enable(RCC_GPIOA);
+   rcc_periph_clock_enable(RCC_USART1);
+   rcc_periph_clock_enable(RCC_SPI1);
 }
 
 void systick_setup(uint32_t cpu_hz)
 {
-   reg32(SYSTICK_RVR) = cpu_hz / 1000u - 1u;
-   reg32(SYSTICK_CVR) = 0u;
-   reg32(SYSTICK_CSR) = 0x07u;
+   systick_set_reload(cpu_hz / 1000u - 1u);
+   systick_set_clocksource(STK_CSR_CLKSOURCE_AHB);
+   systick_clear();
+   systick_interrupt_enable();
+   systick_counter_enable();
 }
 
 void gpio_setup(void)
 {
-   uint32_t crl = reg32(GPIOA_CRL);
-   crl &= ~((0xFu << 0) | (0xFu << 4) | (0xFu << 8) | (0xFu << 16) | (0xFu << 20) | (0xFu << 24) | (0xFu << 28));
-   crl |= (0x3u << 0);
-   crl |= (0x3u << 4);
-   crl |= (0x3u << 8);
-   crl |= (0x3u << 16);
-   crl |= (0xBu << 20);
-   crl |= (0x4u << 24);
-   crl |= (0xBu << 28);
-   reg32(GPIOA_CRL) = crl;
-
-   uint32_t crh = reg32(GPIOA_CRH);
-   crh &= ~((0xFu << 4) | (0xFu << 8));
-   crh |= (0xBu << 4);
-   crh |= (0x4u << 8);
-   reg32(GPIOA_CRH) = crh;
-
-   reg32(GPIOA_BSRR) = (kLedPinsMask << 16) | (1u << 4);
+   gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, kLedPinsMask | GPIO4);
+   gpio_set_mode(GPIOA,
+                 GPIO_MODE_OUTPUT_50_MHZ,
+                 GPIO_CNF_OUTPUT_ALTFN_PUSHPULL,
+                 GPIO5 | GPIO7 | GPIO9);
+   gpio_set_mode(GPIOA, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, GPIO6 | GPIO10);
+   gpio_clear(GPIOA, kLedPinsMask | GPIO4);
 }
 
 void spi_setup(void)
 {
-   reg32(SPI1_CR1) = (1u << 2) | (0x3u << 3) | (1u << 8) | (1u << 9) | (1u << 6);
+   spi_reset(SPI1);
+   spi_init_master(SPI1,
+                   SPI_CR1_BAUDRATE_FPCLK_DIV_16,
+                   SPI_CR1_CPOL_CLK_TO_0_WHEN_IDLE,
+                   SPI_CR1_CPHA_CLK_TRANSITION_1,
+                   SPI_CR1_DFF_8BIT,
+                   SPI_CR1_MSBFIRST);
+   spi_enable_software_slave_management(SPI1);
+   spi_set_nss_high(SPI1);
+   spi_enable(SPI1);
 }
 
 void debug_uart_setup(void)
 {
-   reg32(USART1_BRR) = 0x45u;
-   reg32(USART1_CR1) = (1u << 13) | (1u << 3);
+   usart_set_baudrate(USART1, 115200u);
+   usart_set_databits(USART1, 8u);
+   usart_set_stopbits(USART1, USART_STOPBITS_1);
+   usart_set_parity(USART1, USART_PARITY_NONE);
+   usart_set_flow_control(USART1, USART_FLOWCONTROL_NONE);
+   usart_set_mode(USART1, USART_MODE_TX);
+   usart_enable(USART1);
 }
 
 void delay_ms(uint32_t value)
@@ -105,9 +92,7 @@ uint32_t millis(void)
 
 void debug_putc(char ch)
 {
-   while ((reg32(USART1_SR) & (1u << 7)) == 0u)
-      ;
-   reg32(USART1_DR) = (uint32_t)ch;
+   usart_send_blocking(USART1, (uint16_t)(uint8_t)ch);
 }
 
 void debug_puts(const char* text)
