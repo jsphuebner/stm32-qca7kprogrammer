@@ -13,26 +13,27 @@ constexpr uint32_t kLedBitRed = 1u << 0;
 constexpr uint32_t kLedBitGreen = 1u << 1;
 constexpr uint32_t kLedBitBlue = 1u << 2;
 constexpr uint32_t kLedAllMask = kLedBitRed | kLedBitGreen | kLedBitBlue;
-constexpr uint16_t kLedPinsMask = GPIO2 | GPIO10 | GPIO11;
+constexpr uint16_t kStatusPinsBMask = GPIO4 | GPIO7;
+constexpr uint16_t kStatusPinAContact = GPIO1;
 
-uint16_t led_bits_to_gpio(uint32_t logical_mask)
+void set_status_outputs(uint32_t logical_mask)
 {
-   uint16_t gpio_mask = 0u;
+   uint16_t gpio_b_set = 0u;
+   uint16_t gpio_a_set = 0u;
+
    if ((logical_mask & kLedBitRed) != 0u)
-      gpio_mask |= GPIO2;
+      gpio_b_set |= GPIO7; // led_alive
    if ((logical_mask & kLedBitGreen) != 0u)
-      gpio_mask |= GPIO10;
+      gpio_b_set |= GPIO4; // statec_out
    if ((logical_mask & kLedBitBlue) != 0u)
-      gpio_mask |= GPIO11;
-   return gpio_mask;
-}
+      gpio_a_set |= GPIO1; // contact_out
 
-void set_led_mask(uint32_t logical_mask)
-{
-   const uint16_t set_bits = led_bits_to_gpio(logical_mask);
-   const uint16_t clear_bits = (uint16_t)(kLedPinsMask & (uint16_t)~set_bits);
-   gpio_set(GPIOB, set_bits);
-   gpio_clear(GPIOB, clear_bits);
+   const uint16_t gpio_b_clear = (uint16_t)(kStatusPinsBMask & (uint16_t)~gpio_b_set);
+   const uint16_t gpio_a_clear = (uint16_t)(kStatusPinAContact & (uint16_t)~gpio_a_set);
+   gpio_set(GPIOB, gpio_b_set);
+   gpio_clear(GPIOB, gpio_b_clear);
+   gpio_set(GPIOA, gpio_a_set);
+   gpio_clear(GPIOA, gpio_a_clear);
 }
 }
 
@@ -62,7 +63,8 @@ void systick_setup(uint32_t cpu_hz)
 
 void gpio_setup(void)
 {
-   gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, kLedPinsMask);
+   gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, kStatusPinsBMask);
+   gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, kStatusPinAContact);
    gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_PUSHPULL, GPIO4);
    gpio_set_mode(GPIOA,
                  GPIO_MODE_OUTPUT_50_MHZ,
@@ -71,7 +73,8 @@ void gpio_setup(void)
    gpio_set_mode(GPIOA, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, GPIO6);
    gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_50_MHZ, GPIO_CNF_OUTPUT_ALTFN_PUSHPULL, GPIO10);
    gpio_set_mode(GPIOC, GPIO_MODE_INPUT, GPIO_CNF_INPUT_FLOAT, GPIO11);
-   gpio_clear(GPIOB, kLedPinsMask);
+   gpio_clear(GPIOB, kStatusPinsBMask);
+   gpio_clear(GPIOA, kStatusPinAContact);
    gpio_set(GPIOA, GPIO4);
 }
 
@@ -132,13 +135,13 @@ void status_running_light_update(void)
       return;
 
    next_update = g_millis + 120u;
-   set_led_mask(1u << phase);
+   set_status_outputs(1u << phase);
    phase = (phase + 1u) % 3u;
 }
 
 void led_set_all(bool on)
 {
-   set_led_mask(on ? kLedAllMask : 0u);
+   set_status_outputs(on ? kLedAllMask : 0u);
 }
 #else
 void clock_setup(void) {}

@@ -44,7 +44,7 @@ make get-deps
 
 - The firmware is written in a small standalone style similar to [`stm32-CANBootloader`](https://github.com/jsphuebner/stm32-CANBootloader): a compact Makefile-based STM32 project with minimal startup code and application logic kept in a few focused source files.
 - The current hardware setup targets an STM32F103 with QCA7005 on SPI1 (`PA4` CS, `PA5` SCK, `PA6` MISO, `PA7` MOSI).
-- Status LEDs follow the ccs32clara/foccci RGB mapping on `PB2` (red), `PB10` (green), `PB11` (blue).
+- Status outputs use ccs32clara digital signals `led_alive` (`PB7`), `statec_out` (`PB4`), and `contact_out` (`PA1`).
 - Debug UART follows ccs32clara on `UART4` TX (`PC10`) at `921600` baud.
 - The placeholder asset contents are not valid QCA images; flashing only works after replacing them with the real files.
 - Startup LED patterns:
