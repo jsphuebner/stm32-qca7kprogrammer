@@ -1,4 +1,5 @@
 #include "programmer.h"
+#include "hwinit.h"
 
 namespace {
 constexpr uint8_t kHostMac[6] = { 0x02, 0x00, 0x00, 0x00, 0x00, 0x01 };
@@ -313,6 +314,7 @@ int receive_matching(MmeSession& session, uint16_t expected_mmtype, uint32_t tim
 
    while ((int32_t)(deadline - session.transport->millis(session.transport->context)) >= 0)
    {
+      status_running_light_update();
       const uint32_t remaining = deadline - session.transport->millis(session.transport->context);
       const int length = session.transport->receive_frame(session.transport->context,
                                                           session.response,
@@ -395,6 +397,7 @@ bool wait_for_start(MmeSession& session, char* version, size_t version_capacity)
 
    while ((int32_t)(deadline - session.transport->millis(session.transport->context)) >= 0)
    {
+      status_running_light_update();
       mem_set(session.frame, 0, sizeof(VsSwVerRequest));
       build_ethernet_header(request->ethernet, session.peer, kHostMac);
       build_qualcomm_header(request->qualcomm, (uint16_t)(kVsSwVer | kMmtypeReq));
@@ -434,6 +437,7 @@ bool write_execute(MmeSession& session,
 
    while (remaining > 0u)
    {
+      status_running_light_update();
       VsWriteExecuteRequest* request = (VsWriteExecuteRequest*)session.frame;
       mem_set(session.frame, 0, sizeof(VsWriteExecuteRequest));
       build_ethernet_header(request->ethernet, session.peer, kHostMac);
@@ -520,6 +524,7 @@ bool module_write(MmeSession& session, const EmbeddedImage& image, uint8_t modul
 
    while (remaining > 0u)
    {
+      status_running_light_update();
       VsModuleOperationWriteRequest* request = (VsModuleOperationWriteRequest*)session.frame;
       mem_set(session.frame, 0, sizeof(VsModuleOperationWriteRequest));
       build_ethernet_header(request->ethernet, session.peer, kHostMac);
@@ -641,6 +646,8 @@ bool flash_firmware_and_pib(MmeSession& session, const EmbeddedImage& firmware, 
 
 ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTransport& transport)
 {
+   status_running_light_update();
+
    if (!transport.send_frame || !transport.receive_frame || !transport.delay_ms || !transport.millis)
       return PROGRAMMER_TRANSPORT_ERROR;
 

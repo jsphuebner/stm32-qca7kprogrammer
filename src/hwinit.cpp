@@ -28,6 +28,17 @@ constexpr uintptr_t SPI1_CR1 = SPI1_BASE + 0x00u;
 constexpr uintptr_t SYSTICK_CSR = SYSTICK_BASE + 0x00u;
 constexpr uintptr_t SYSTICK_RVR = SYSTICK_BASE + 0x04u;
 constexpr uintptr_t SYSTICK_CVR = SYSTICK_BASE + 0x08u;
+constexpr uint32_t kLedAlivePin = 0u;
+constexpr uint32_t kStatecOutPin = 1u;
+constexpr uint32_t kContactOutPin = 2u;
+constexpr uint32_t kLedPinsMask = (1u << kLedAlivePin) | (1u << kStatecOutPin) | (1u << kContactOutPin);
+
+void set_led_mask(uint32_t on_mask)
+{
+   const uint32_t set_bits = kLedPinsMask & on_mask;
+   const uint32_t reset_bits = (kLedPinsMask & ~on_mask) << 16;
+   reg32(GPIOA_BSRR) = set_bits | reset_bits;
+}
 }
 
 extern "C" void SysTick_Handler(void)
@@ -50,7 +61,10 @@ void systick_setup(uint32_t cpu_hz)
 void gpio_setup(void)
 {
    uint32_t crl = reg32(GPIOA_CRL);
-   crl &= ~((0xFu << 16) | (0xFu << 20) | (0xFu << 24) | (0xFu << 28));
+   crl &= ~((0xFu << 0) | (0xFu << 4) | (0xFu << 8) | (0xFu << 16) | (0xFu << 20) | (0xFu << 24) | (0xFu << 28));
+   crl |= (0x3u << 0);
+   crl |= (0x3u << 4);
+   crl |= (0x3u << 8);
    crl |= (0x3u << 16);
    crl |= (0xBu << 20);
    crl |= (0x4u << 24);
@@ -63,7 +77,7 @@ void gpio_setup(void)
    crh |= (0x4u << 8);
    reg32(GPIOA_CRH) = crh;
 
-   reg32(GPIOA_BSRR) = (1u << 4);
+   reg32(GPIOA_BSRR) = (kLedPinsMask << 16) | (1u << 4);
 }
 
 void spi_setup(void)
@@ -101,6 +115,24 @@ void debug_puts(const char* text)
    for (size_t index = 0; text[index] != '\0'; index++)
       debug_putc(text[index]);
 }
+
+void status_running_light_update(void)
+{
+   static uint32_t next_update = 0u;
+   static uint32_t phase = 0u;
+
+   if ((int32_t)(g_millis - next_update) < 0)
+      return;
+
+   next_update = g_millis + 120u;
+   set_led_mask(1u << phase);
+   phase = (phase + 1u) % 3u;
+}
+
+void led_set_all(bool on)
+{
+   set_led_mask(on ? kLedPinsMask : 0u);
+}
 #else
 void clock_setup(void) {}
 void systick_setup(uint32_t) {}
@@ -111,4 +143,6 @@ void delay_ms(uint32_t) {}
 uint32_t millis(void) { return 0u; }
 void debug_putc(char) {}
 void debug_puts(const char*) {}
+void status_running_light_update(void) {}
+void led_set_all(bool) {}
 #endif

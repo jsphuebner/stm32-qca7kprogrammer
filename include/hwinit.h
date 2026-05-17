@@ -12,5 +12,7 @@ void delay_ms(uint32_t value);
 uint32_t millis(void);
 void debug_putc(char ch);
 void debug_puts(const char* text);
+void status_running_light_update(void);
+void led_set_all(bool on);
 
 #endif
