@@ -616,8 +616,9 @@ bool wait_for_runtime_start(MmeSession& session, char* version, size_t version_c
          debug_puts("\r\n");
          if (confirm->mstatus != 0u)
             return false;
-         if (!cstr_equal(version, "BootLoader"))
-            return true;
+         if (cstr_equal(version, "BootLoader"))
+            debug_puts("[MME] runtime still reports BootLoader; continuing\r\n");
+         return true;
       }
       else
       {
