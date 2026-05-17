@@ -50,7 +50,7 @@ check-cross-tools:
 check-libopencm3:
 	@test -d libopencm3/include || (echo "Missing libopencm3 submodule. Run: git submodule update --init --recursive" && exit 1)
 
-get-deps:
+get-deps: check-cross-tools
 	git submodule update --init --recursive
 	$(MAKE) -C libopencm3 TARGETS=stm32/f1
 
