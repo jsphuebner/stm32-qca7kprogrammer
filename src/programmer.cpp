@@ -25,6 +25,7 @@ constexpr size_t kModuleChunk = 1400;
 constexpr uint32_t kCookie = 0x78563412u;
 constexpr uint32_t kStartTimeoutMs = 60000u;
 constexpr uint32_t kResponseTimeoutMs = 5000u;
+constexpr uint32_t kModuleRequestTimeoutMs = 60000u;
 constexpr uint32_t kModuleTimeoutMs = 90000u;
 constexpr uint32_t kCommitFlags = 0x80000003u;
 constexpr uint32_t kModuleFlagExecute = (1u << 0);
@@ -636,14 +637,12 @@ bool module_session(MmeSession& session, const ModuleSpec* modules, uint8_t modu
    for (uint8_t index = 0; index < module_count; index++)
       request->modules[index] = modules[index];
 
-   const size_t length = sizeof(EthernetHeader) + sizeof(QualcommHeader) + sizeof(uint32_t) + 1u +
-         sizeof(request->module_spec) + module_count * sizeof(ModuleSpec);
-   if (!send_frame(session, length))
+   if (!send_frame(session, sizeof(VsModuleOperationStartRequest)))
       return false;
 
-   const int response_length = receive_matching(session,
-                                                (uint16_t)(kVsModuleOperation | kMmtypeCnf),
-                                                kResponseTimeoutMs);
+    const int response_length = receive_matching(session,
+                                                 (uint16_t)(kVsModuleOperation | kMmtypeCnf),
+                                                 kModuleRequestTimeoutMs);
    if (response_length <= 0)
       return false;
 

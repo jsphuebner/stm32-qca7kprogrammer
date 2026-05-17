@@ -74,6 +74,29 @@ struct PACKED VsModuleWriteRequest
    uint8_t module_data[kModuleChunk];
 };
 
+struct PACKED VsModuleStartRequest
+{
+   EthernetHeader ethernet;
+   QualcommHeader qualcomm;
+   uint32_t reserved;
+   uint8_t num_op_data;
+   struct PACKED
+   {
+      uint16_t mod_op;
+      uint16_t mod_op_data_len;
+      uint32_t mod_op_reserved;
+      uint32_t mod_op_session_id;
+      uint8_t num_modules;
+   } module_spec;
+   struct PACKED
+   {
+      uint16_t module_id;
+      uint16_t module_sub_id;
+      uint32_t module_length;
+      uint32_t module_checksum;
+   } modules[2];
+};
+
 struct FakeTransport
 {
    std::deque<std::vector<uint8_t>> responses;
@@ -184,7 +207,7 @@ struct FakeTransport
       responses.push_back(frame);
    }
 
-   static bool send_frame(void* context, const uint8_t* frame, size_t)
+   static bool send_frame(void* context, const uint8_t* frame, size_t frame_size)
    {
       FakeTransport* self = static_cast<FakeTransport*>(context);
       const QualcommHeader* qualcomm = reinterpret_cast<const QualcommHeader*>(frame + sizeof(EthernetHeader));
@@ -211,7 +234,10 @@ struct FakeTransport
          const uint16_t mod_op = (uint16_t)(payload[0] | (payload[1] << 8));
          self->sequence.push_back((uint16_t)(0xF000u | mod_op));
          if (mod_op == kModuleOpStartSession)
+         {
+            assert(frame_size == sizeof(VsModuleStartRequest));
             self->enqueue_module_start_confirm(frame);
+         }
          else if (mod_op == kModuleOpWriteModule)
             self->enqueue_module_write_confirm(*reinterpret_cast<const VsModuleWriteRequest*>(frame));
          else if (mod_op == kModuleOpCloseSession)
