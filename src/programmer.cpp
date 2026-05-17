@@ -655,28 +655,51 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
    ImageDescriptor runtime;
    ImageDescriptor pib;
    ImageDescriptor pib_manifest;
+   const uint8_t* pib_upload_data = images.pib.data;
+   uint32_t pib_upload_length = (uint32_t)images.pib.size;
+   uint32_t pib_upload_start = 0u;
+   uint32_t pib_upload_total = (uint32_t)images.pib.size;
+   uint32_t pib_upload_entry = 0u;
+   uint32_t pib_upload_checksum = checksum32(images.pib.data, images.pib.size, 0u);
 
    if (!find_image(images.firmware, kImageTypeMemctl, memctl) ||
-       !find_image(images.firmware, kImageTypeFirmware, runtime) ||
-       !find_image(images.pib, kImageTypePib, pib) ||
-       !find_image(images.pib, kImageTypeManifest, pib_manifest))
+       !find_image(images.firmware, kImageTypeFirmware, runtime))
       return PROGRAMMER_INVALID_IMAGES;
 
    if (!validate_image_payload(images.firmware, memctl) ||
-       !validate_image_payload(images.firmware, runtime) ||
-       !validate_image_payload(images.pib, pib) ||
-       !validate_image_payload(images.pib, pib_manifest))
+       !validate_image_payload(images.firmware, runtime))
       return PROGRAMMER_INVALID_IMAGES;
+
+   if (find_image(images.pib, kImageTypePib, pib) &&
+       find_image(images.pib, kImageTypeManifest, pib_manifest) &&
+       validate_image_payload(images.pib, pib) &&
+       validate_image_payload(images.pib, pib_manifest))
+   {
+      const uint32_t pib_length = le32_to_host(pib.header.image_length);
+      const uint32_t pib_transfer_length = (uint32_t)(sizeof(NvmHeader2) +
+            le32_to_host(pib_manifest.header.image_length) + sizeof(NvmHeader2) + pib_length);
+
+      if (pib_transfer_length > images.pib.size)
+         return PROGRAMMER_INVALID_IMAGES;
+
+      pib_upload_data = images.pib.data;
+      pib_upload_length = pib_transfer_length;
+      pib_upload_start = le32_to_host(pib.header.image_address);
+      pib_upload_total = pib_length;
+      pib_upload_entry = le32_to_host(pib.header.entry_point);
+      pib_upload_checksum = le32_to_host(pib.header.image_checksum);
+   }
+   else if (images.pib.size == 0u || images.pib.size > 0xFFFFFFFFu)
+   {
+      return PROGRAMMER_INVALID_IMAGES;
+   }
 
    const uint32_t memctl_length = le32_to_host(memctl.header.image_length);
    const uint32_t runtime_length = le32_to_host(runtime.header.image_length);
-   const uint32_t pib_length = le32_to_host(pib.header.image_length);
-   const uint32_t pib_transfer_length = (uint32_t)(sizeof(NvmHeader2) +
-         le32_to_host(pib_manifest.header.image_length) + sizeof(NvmHeader2) + pib_length);
 
    if (memctl.data_offset + memctl_length > images.firmware.size ||
        runtime.data_offset + runtime_length > images.firmware.size ||
-       pib_transfer_length > images.pib.size)
+       pib_upload_length > images.pib.size)
       return PROGRAMMER_INVALID_IMAGES;
 
    MmeSession session;
@@ -701,14 +724,14 @@ ProgrammerResult run_programmer(const EmbeddedImages& images, const EthernetTran
       return PROGRAMMER_PROTOCOL_ERROR;
 
    if (!write_execute(session,
-                      images.pib.data,
-                      pib_transfer_length,
-                      le32_to_host(pib.header.image_address),
-                      pib_length,
-                      le32_to_host(pib.header.entry_point),
-                      le32_to_host(pib.header.image_checksum),
-                      0u,
-                      false))
+                       pib_upload_data,
+                       pib_upload_length,
+                       pib_upload_start,
+                       pib_upload_total,
+                       pib_upload_entry,
+                       pib_upload_checksum,
+                       0u,
+                       false))
       return PROGRAMMER_PROTOCOL_ERROR;
 
    if (!write_execute(session,

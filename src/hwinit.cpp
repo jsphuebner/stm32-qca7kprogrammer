@@ -9,12 +9,28 @@
 #include <libopencm3/stm32/usart.h>
 namespace {
 volatile uint32_t g_millis = 0;
+constexpr uint32_t kLedBitRed = 1u << 0;
+constexpr uint32_t kLedBitGreen = 1u << 1;
+constexpr uint32_t kLedBitBlue = 1u << 2;
+constexpr uint32_t kLedAllMask = kLedBitRed | kLedBitGreen | kLedBitBlue;
 constexpr uint16_t kLedPinsMask = GPIO2 | GPIO10 | GPIO11;
 
-void set_led_mask(uint32_t on_mask)
+uint16_t led_bits_to_gpio(uint32_t logical_mask)
 {
-   const uint16_t set_bits = (uint16_t)(kLedPinsMask & (uint16_t)on_mask);
-   const uint16_t clear_bits = (uint16_t)(kLedPinsMask & (uint16_t)~on_mask);
+   uint16_t gpio_mask = 0u;
+   if ((logical_mask & kLedBitRed) != 0u)
+      gpio_mask |= GPIO2;
+   if ((logical_mask & kLedBitGreen) != 0u)
+      gpio_mask |= GPIO10;
+   if ((logical_mask & kLedBitBlue) != 0u)
+      gpio_mask |= GPIO11;
+   return gpio_mask;
+}
+
+void set_led_mask(uint32_t logical_mask)
+{
+   const uint16_t set_bits = led_bits_to_gpio(logical_mask);
+   const uint16_t clear_bits = (uint16_t)(kLedPinsMask & (uint16_t)~set_bits);
    gpio_set(GPIOB, set_bits);
    gpio_clear(GPIOB, clear_bits);
 }
@@ -122,7 +138,7 @@ void status_running_light_update(void)
 
 void led_set_all(bool on)
 {
-   set_led_mask(on ? kLedPinsMask : 0u);
+   set_led_mask(on ? kLedAllMask : 0u);
 }
 #else
 void clock_setup(void) {}
