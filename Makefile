@@ -20,6 +20,7 @@ FREESTANDING_CPP= -fno-exceptions -fno-rtti -fno-threadsafe-statics
 FW_CFLAGS       = -Os $(COMMON_WARNINGS) $(FW_INCLUDES) $(FW_DEFINES) $(FREESTANDING) -mcpu=cortex-m3 -mthumb -std=gnu11
 FW_CPPFLAGS     = -Os $(COMMON_WARNINGS) $(FW_INCLUDES) $(FW_DEFINES) $(FREESTANDING) $(FREESTANDING_CPP) -mcpu=cortex-m3 -mthumb -std=c++17
 FW_LDFLAGS      = -nostdlib -Wl,--gc-sections,-Map,$(OUT_DIR)/$(BINARY).map -Tstm32_qca7kprogrammer.ld
+FW_LIBS         = -Llibopencm3/lib -lopencm3_stm32f1 -lgcc
 HOST_FLAGS      = -O2 $(COMMON_WARNINGS) $(COMMON_INCLUDES) -DHOST_BUILD -std=c++17
 HOST_CFLAGS     = -O2 $(COMMON_WARNINGS) $(COMMON_INCLUDES) -DHOST_BUILD -std=gnu11
 
@@ -64,7 +65,7 @@ $(OUT_DIR)/%.o: src/%.c Makefile | $(OUT_DIR)
 	$(CC) $(FW_CFLAGS) -c $< -o $@
 
 $(OUT_DIR)/$(BINARY).elf: $(FW_OBJS) stm32_qca7kprogrammer.ld
-	$(LD) $(FW_CPPFLAGS) $(FW_LDFLAGS) -o $@ $(FW_OBJS) -lgcc
+	$(LD) $(FW_CPPFLAGS) $(FW_LDFLAGS) -o $@ $(FW_OBJS) $(FW_LIBS)
 	$(SIZE) $@
 
 $(OUT_DIR)/$(BINARY).bin: $(OUT_DIR)/$(BINARY).elf
