@@ -8,10 +8,13 @@
 namespace {
 constexpr uint16_t kVsSwVer = 0xA000;
 constexpr uint16_t kVsRsDev = 0xA01C;
+constexpr uint16_t kVsHostAction = 0xA060;
 constexpr uint16_t kVsWriteExecuteApplet = 0xA098;
 constexpr uint16_t kVsModuleOperation = 0xA0B0;
 constexpr uint16_t kMmtypeReq = 0x0000;
 constexpr uint16_t kMmtypeCnf = 0x0001;
+constexpr uint16_t kMmtypeInd = 0x0002;
+constexpr uint16_t kMmtypeRsp = 0x0003;
 constexpr uint16_t kModuleOpStartSession = 0x0010;
 constexpr uint16_t kModuleOpWriteModule = 0x0011;
 constexpr uint16_t kModuleOpCloseSession = 0x0012;
@@ -77,6 +80,7 @@ struct FakeTransport
    std::vector<uint16_t> sequence;
    uint32_t now_ms = 0;
    int sw_ver_count = 0;
+   bool inject_host_action = false;
 
    static void push_ethernet(std::vector<uint8_t>& frame, uint16_t mmtype)
    {
@@ -172,6 +176,14 @@ struct FakeTransport
       responses.push_back(frame);
    }
 
+   void enqueue_host_action_ind()
+   {
+      std::vector<uint8_t> frame;
+      push_ethernet(frame, (uint16_t)(kVsHostAction | kMmtypeInd));
+      frame.resize(sizeof(EthernetHeader) + sizeof(QualcommHeader) + 1u, 0u);
+      responses.push_back(frame);
+   }
+
    static bool send_frame(void* context, const uint8_t* frame, size_t)
    {
       FakeTransport* self = static_cast<FakeTransport*>(context);
@@ -182,13 +194,19 @@ struct FakeTransport
       switch (mmtype)
       {
       case (kVsSwVer | kMmtypeReq):
+         if (self->inject_host_action)
+            self->enqueue_host_action_ind();
          self->enqueue_sw_ver(self->sw_ver_count++ == 0 ? "BootLoader" : "Runtime");
          break;
       case (kVsWriteExecuteApplet | kMmtypeReq):
+         if (self->inject_host_action)
+            self->enqueue_host_action_ind();
          self->enqueue_write_execute_confirm(*reinterpret_cast<const VsWriteExecuteRequest*>(frame));
          break;
       case (kVsModuleOperation | kMmtypeReq):
       {
+         if (self->inject_host_action)
+            self->enqueue_host_action_ind();
          const uint8_t* payload = frame + sizeof(EthernetHeader) + sizeof(QualcommHeader) + 5;
          const uint16_t mod_op = (uint16_t)(payload[0] | (payload[1] << 8));
          self->sequence.push_back((uint16_t)(0xF000u | mod_op));
@@ -201,7 +219,11 @@ struct FakeTransport
          break;
       }
       case (kVsRsDev | kMmtypeReq):
+         if (self->inject_host_action)
+            self->enqueue_host_action_ind();
          self->enqueue_reset_confirm();
+         break;
+      case (kVsHostAction | kMmtypeRsp):
          break;
       default:
          assert(false && "unexpected request");
@@ -436,6 +458,45 @@ void test_firmware_lookup_with_nonzero_header_checksums()
    const ProgrammerResult result = run_programmer(images, transport);
    assert(result == PROGRAMMER_OK);
 }
+
+void test_host_action_indication_is_acknowledged()
+{
+   const std::vector<uint8_t> payload = { 0x01, 0x02, 0x03, 0x04 };
+   std::vector<uint8_t> softloader = append(make_header(0x000Bu, 0x1000u, 0x1000u, payload, 0xFFFFFFFFu), payload);
+
+   const uint32_t firmware_second_header = (uint32_t)(sizeof(NvmHeader2) + payload.size());
+   std::vector<uint8_t> firmware = append(make_header(0x0007u, 0x2000u, 0x2000u, payload, firmware_second_header), payload);
+   firmware = append(firmware, make_header(0x0004u, 0x3000u, 0x3000u, payload, 0xFFFFFFFFu));
+   firmware = append(firmware, payload);
+
+   const uint32_t pib_second_header = (uint32_t)(sizeof(NvmHeader2) + payload.size());
+   std::vector<uint8_t> pib = append(make_header(0x000Eu, 0x4000u, 0x4000u, payload, pib_second_header), payload);
+   pib = append(pib, make_header(0x000Fu, 0x5000u, 0x5000u, payload, 0xFFFFFFFFu));
+   pib = append(pib, payload);
+
+   EmbeddedImages images = {
+      { "softloader.nvm", softloader.data(), softloader.size() },
+      { "firmware.nvm", firmware.data(), firmware.size() },
+      { "evse.pib", pib.data(), pib.size() }
+   };
+
+   FakeTransport fake;
+   fake.inject_host_action = true;
+   EthernetTransport transport = { &fake, FakeTransport::send_frame, FakeTransport::receive_frame,
+                                   FakeTransport::delay_ms, FakeTransport::millis };
+   assert(run_programmer(images, transport) == PROGRAMMER_OK);
+
+   bool saw_rsp = false;
+   for (size_t index = 0; index < fake.sequence.size(); index++)
+   {
+      if (fake.sequence[index] == (uint16_t)(kVsHostAction | kMmtypeRsp))
+      {
+         saw_rsp = true;
+         break;
+      }
+   }
+   assert(saw_rsp);
+}
 } // namespace
 
 int main()
@@ -445,5 +506,6 @@ int main()
    test_raw_pib_detection();
    test_corrupt_payload_detection();
    test_firmware_lookup_with_nonzero_header_checksums();
+   test_host_action_indication_is_acknowledged();
    return 0;
 }

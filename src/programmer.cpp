@@ -7,10 +7,13 @@ constexpr uint8_t kLocalCast[6] = { 0x00, 0xB0, 0x52, 0x00, 0x00, 0x01 };
 constexpr uint16_t kEtherTypeHomePlug = 0x88E1;
 constexpr uint16_t kVsSwVer = 0xA000;
 constexpr uint16_t kVsRsDev = 0xA01C;
+constexpr uint16_t kVsHostAction = 0xA060;
 constexpr uint16_t kVsWriteExecuteApplet = 0xA098;
 constexpr uint16_t kVsModuleOperation = 0xA0B0;
 constexpr uint16_t kMmtypeReq = 0x0000;
 constexpr uint16_t kMmtypeCnf = 0x0001;
+constexpr uint16_t kMmtypeInd = 0x0002;
+constexpr uint16_t kMmtypeRsp = 0x0003;
 constexpr uint16_t kImageTypeFirmware = 0x0004;
 constexpr uint16_t kImageTypeMemctl = 0x0007;
 constexpr uint16_t kImageTypeManifest = 0x000E;
@@ -246,6 +249,13 @@ struct PACKED VsRsDevConfirm
    uint8_t mstatus;
 };
 
+struct PACKED VsHostActionResponse
+{
+   EthernetHeader ethernet;
+   QualcommHeader qualcomm;
+   uint8_t mstatus;
+};
+
 struct ImageDescriptor
 {
    NvmHeader2 header;
@@ -373,6 +383,34 @@ bool parse_mme(const uint8_t* frame, size_t length, uint16_t expected_mmtype)
    return true;
 }
 
+int handle_host_action_indication(MmeSession& session, const uint8_t* frame, size_t length)
+{
+   if (length < sizeof(EthernetHeader) + sizeof(QualcommHeader))
+      return 0;
+
+   const EthernetHeader* ethernet = (const EthernetHeader*)frame;
+   if (ethernet->type != host_to_be16(kEtherTypeHomePlug))
+      return 0;
+
+   const QualcommHeader* qualcomm = (const QualcommHeader*)(frame + sizeof(EthernetHeader));
+   uint16_t mmtype = 0u;
+   mem_copy(&mmtype, &qualcomm->mmtype, sizeof(mmtype));
+
+   if (qualcomm->mmv != kMmv || le16_to_host(mmtype) != (uint16_t)(kVsHostAction | kMmtypeInd))
+      return 0;
+
+   debug_puts("[MME] host action ind -> rsp\r\n");
+   VsHostActionResponse* response = (VsHostActionResponse*)session.frame;
+   mem_set(session.frame, 0, sizeof(VsHostActionResponse));
+   build_ethernet_header(response->ethernet, ethernet->source, kHostMac);
+   build_qualcomm_header(response->qualcomm, (uint16_t)(kVsHostAction | kMmtypeRsp));
+   response->mstatus = 0u;
+   if (!send_frame(session, sizeof(VsHostActionResponse)))
+      return -1;
+
+   return 1;
+}
+
 int receive_matching(MmeSession& session, uint16_t expected_mmtype, uint32_t timeout_ms)
 {
    const uint32_t deadline = session.transport->millis(session.transport->context) + timeout_ms;
@@ -390,6 +428,12 @@ int receive_matching(MmeSession& session, uint16_t expected_mmtype, uint32_t tim
          debug_puts(length < 0 ? "[MME] receive error\r\n" : "[MME] receive timeout\r\n");
          return length;
       }
+
+      const int host_action_result = handle_host_action_indication(session, session.response, (size_t)length);
+      if (host_action_result < 0)
+         return -1;
+      if (host_action_result > 0)
+         continue;
 
       if (parse_mme(session.response, (size_t)length, expected_mmtype))
          return length;
