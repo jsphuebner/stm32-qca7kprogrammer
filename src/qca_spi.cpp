@@ -81,8 +81,8 @@ int qca_recv_frame(uint8_t *eth_frame, uint16_t *eth_len_out, uint16_t maxlen)
 {
     /* Poll the interrupt-cause register: bit SPI_INT_PKT_AVLBL is set by the
      * QCA chip when it has placed a complete frame in its read buffer.
-     * This avoids a fixed post-send delay and lets us react as soon as data
-     * is ready.  The bit is write-1-to-clear. */
+     * This replaces the previous fixed 200 ms post-send delay and lets us
+     * react as soon as data is ready.  The bit is write-1-to-clear. */
     uint16_t intr = qca_read_reg(SPI_REG_INTR_CAUSE);
     if (!(intr & SPI_INT_PKT_AVLBL)) return 0;
     qca_write_reg(SPI_REG_INTR_CAUSE, SPI_INT_PKT_AVLBL);
