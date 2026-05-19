@@ -369,6 +369,10 @@ bool programmer_write_execute(const uint8_t *image_data,
                 continue;
 
             uint16_t mmtype = frame_mmtype(s_recv, rlen);
+            if (mmtype == (VS_HOST_ACTION | MMTYPE_IND)) {
+                send_host_action_rsp();
+                continue;
+            }
             if (mmtype == (VS_WRITE_AND_EXECUTE_APPLET | MMTYPE_CNF)) {
                 if (rlen < (uint16_t)(MME_HDR_LEN + 36u)) return false;
                 uint32_t mstatus = rd32le(s_recv + MME_HDR_LEN);
@@ -455,7 +459,12 @@ static bool mod_start_session(uint32_t session_id,
         uint16_t rlen = 0;
         if (qca_recv_frame(s_recv, &rlen, (uint16_t)sizeof(s_recv)) != 1)
             continue;
-        if (frame_mmtype(s_recv, rlen) == (VS_MODULE_OPERATION | MMTYPE_CNF)) {
+        uint16_t mmtype = frame_mmtype(s_recv, rlen);
+        if (mmtype == (VS_HOST_ACTION | MMTYPE_IND)) {
+            send_host_action_rsp();
+            continue;
+        }
+        if (mmtype == (VS_MODULE_OPERATION | MMTYPE_CNF)) {
             if (rlen < (uint16_t)(MME_HDR_LEN + 2u)) return false;
             uint16_t status = rd16le(s_recv + MME_HDR_LEN);
             if (status != 0) {
@@ -490,7 +499,12 @@ static bool mod_close_session(uint32_t session_id, uint32_t commit_code)
         uint16_t rlen = 0;
         if (qca_recv_frame(s_recv, &rlen, (uint16_t)sizeof(s_recv)) != 1)
             continue;
-        if (frame_mmtype(s_recv, rlen) == (VS_MODULE_OPERATION | MMTYPE_CNF)) {
+        uint16_t mmtype = frame_mmtype(s_recv, rlen);
+        if (mmtype == (VS_HOST_ACTION | MMTYPE_IND)) {
+            send_host_action_rsp();
+            continue;
+        }
+        if (mmtype == (VS_MODULE_OPERATION | MMTYPE_CNF)) {
             if (rlen < (uint16_t)(MME_HDR_LEN + 2u)) return false;
             uint16_t status = rd16le(s_recv + MME_HDR_LEN);
             if (status != 0) {
@@ -545,7 +559,12 @@ bool programmer_flash_module(const uint8_t *file_data, uint32_t file_size,
             uint16_t rlen = 0;
             if (qca_recv_frame(s_recv, &rlen, (uint16_t)sizeof(s_recv)) != 1)
                 continue;
-            if (frame_mmtype(s_recv, rlen) == (VS_MODULE_OPERATION | MMTYPE_CNF)) {
+            uint16_t mmtype = frame_mmtype(s_recv, rlen);
+            if (mmtype == (VS_HOST_ACTION | MMTYPE_IND)) {
+                send_host_action_rsp();
+                continue;
+            }
+            if (mmtype == (VS_MODULE_OPERATION | MMTYPE_CNF)) {
                 if (rlen < (uint16_t)(MME_HDR_LEN + 2u)) return false;
                 uint16_t status = rd16le(s_recv + MME_HDR_LEN);
                 if (status != 0) {
