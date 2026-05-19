@@ -1,0 +1,4 @@
+src/*.fw.o
+firmware.elf
+firmware.bin
+tests/run_tests
