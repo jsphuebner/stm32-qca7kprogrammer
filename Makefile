@@ -9,7 +9,7 @@ OBJCOPY  := $(CROSS)objcopy
 CXX_NATIVE := g++
 
 # ── Firmware compiler flags ───────────────────────────────────────────────
-CXXFLAGS_FW := -mcpu=cortex-m3 -mthumb -Os -fno-exceptions -fno-rtti
+CXXFLAGS_FW := -mcpu=cortex-m3 -mthumb -Og -ggdb -fno-exceptions -fno-rtti
 CXXFLAGS_FW += -DSTM32F1
 CXXFLAGS_FW += -Ilibopencm3/include -Iinclude
 CXXFLAGS_FW += -std=c++11 -Wall -Wextra

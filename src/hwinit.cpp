@@ -31,6 +31,9 @@ void hw_init(void)
     rcc_periph_clock_enable(RCC_UART4);
     rcc_periph_clock_enable(RCC_AFIO);
 
+    /* Disable JTAG to make PB4 available */
+    gpio_primary_remap(AFIO_MAPR_SWJ_CFG_JTAG_OFF_SW_ON, 0);
+
     /* ── SPI1 ─────────────────────────────────────────────────────────────
      * PA4 = NSS  (manual CS, output push-pull)
      * PA5 = SCK  (AF push-pull)
@@ -72,12 +75,12 @@ void hw_init(void)
     /* ── LEDs ─────────────────────────────────────────────────────────────
      * PA1 = contact_out, PB4 = statec_out, PB7 = led_alive  (all off)
      */
-    gpio_set_mode(GPIOA, GPIO_MODE_OUTPUT_2_MHZ,
-                  GPIO_CNF_OUTPUT_PUSHPULL, GPIO1);
     gpio_set_mode(GPIOB, GPIO_MODE_OUTPUT_2_MHZ,
                   GPIO_CNF_OUTPUT_PUSHPULL, GPIO4 | GPIO7);
-    gpio_clear(GPIOA, GPIO1);
+    gpio_set_mode(GPIOC, GPIO_MODE_OUTPUT_2_MHZ,
+                  GPIO_CNF_OUTPUT_PUSHPULL, GPIO8);
     gpio_clear(GPIOB, GPIO4 | GPIO7);
+    gpio_clear(GPIOC, GPIO8);
 
     /* ── SysTick at 1 kHz ─────────────────────────────────────────────── */
     systick_set_clocksource(STK_CSR_CLKSOURCE_AHB_DIV8);
@@ -97,7 +100,7 @@ void led_set(led_id_t led, bool on)
         if (on) gpio_set(GPIOB, GPIO4);   else gpio_clear(GPIOB, GPIO4);
         break;
     case LED_CONTACT:
-        if (on) gpio_set(GPIOA, GPIO1);   else gpio_clear(GPIOA, GPIO1);
+        if (on) gpio_set(GPIOC, GPIO8);   else gpio_clear(GPIOC, GPIO8);
         break;
     }
 }

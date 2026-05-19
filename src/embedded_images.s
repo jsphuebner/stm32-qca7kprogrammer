@@ -26,7 +26,7 @@ _binary_firmware_nvm_end:
     .global _binary_evse_pib_start
     .type   _binary_evse_pib_start, %object
 _binary_evse_pib_start:
-    .incbin "evse.pib"
+    .incbin "pev.pib"
 _binary_evse_pib_end:
     .global _binary_evse_pib_end
     .type   _binary_evse_pib_end, %object
