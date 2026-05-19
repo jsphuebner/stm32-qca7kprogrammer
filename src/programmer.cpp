@@ -498,9 +498,8 @@ static bool mod_close_session(uint32_t session_id, uint32_t commit_code)
     memset(s_send + pos, 0, 4);  pos += 4; /* MOD_OP_RSVD      */
     wr32le(s_send + pos, session_id);       pos += 4;
     wr32le(s_send + pos, commit_code);      pos += 4;
-    memset(s_send + pos, 0, 20); pos += 20; /* RSVD[20]        */
 
-    if (qca_send_frame(s_send, pos) != 0) return false;
+    if (send_frame(pos) != 0) return false;
 
     uint32_t t = millis();
     while ((millis() - t) < 2000u) {
