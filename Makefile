@@ -16,7 +16,7 @@ CXXFLAGS_FW += -std=c++11 -Wall -Wextra
 CXXFLAGS_FW += -ffunction-sections -fdata-sections
 
 # ── Linker flags ──────────────────────────────────────────────────────────
-LDFLAGS_FW  := -mcpu=cortex-m3 -mthumb -nostdlib -T stm32f103.ld
+LDFLAGS_FW  := -mcpu=cortex-m3 -mthumb -nostartfiles -T stm32f103.ld
 LDFLAGS_FW  += -Wl,--gc-sections
 FW_LIBS     := -Llibopencm3/lib -lopencm3_stm32f1 -lgcc
 

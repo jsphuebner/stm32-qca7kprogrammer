@@ -8,8 +8,8 @@ MEMORY
     RAM   (rwx) : ORIGIN = 0x20000000, LENGTH = 64K
 }
 
-/* Stack at top of RAM */
-_stack_end = ORIGIN(RAM) + LENGTH(RAM);
+/* Initial stack pointer at top of RAM (symbol name expected by libopencm3) */
+_stack = ORIGIN(RAM) + LENGTH(RAM);
 
 SECTIONS
 {
@@ -18,23 +18,35 @@ SECTIONS
         KEEP(*(.vectors))
         *(.text*)
         *(.rodata*)
+        . = ALIGN(4);
+        __preinit_array_start = .;
+        KEEP(*(.preinit_array))
+        __preinit_array_end = .;
+        __init_array_start = .;
+        KEEP(*(SORT(.init_array.*)))
+        KEEP(*(.init_array))
+        __init_array_end = .;
+        __fini_array_start = .;
+        KEEP(*(SORT(.fini_array.*)))
+        KEEP(*(.fini_array))
+        __fini_array_end = .;
     } > FLASH
 
-    _data_load = LOADADDR(.data);
+    _data_loadaddr = LOADADDR(.data);
 
     .data :
     {
-        _data_start = .;
+        _data = .;
         *(.data*)
-        _data_end = .;
+        _edata = .;
     } > RAM AT > FLASH
 
     .bss :
     {
-        _bss_start = .;
+        _bss = .;
         *(.bss*)
         *(COMMON)
-        _bss_end = .;
+        _ebss = .;
     } > RAM
 
     . = ALIGN(8);
