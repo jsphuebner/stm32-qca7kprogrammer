@@ -295,7 +295,9 @@ static bool programmer_wait_for_runtime(uint32_t timeout_ms)
             if (rlen <= 0) continue;
 
             uint16_t mmtype = frame_mmtype(s_recv, (uint16_t)rlen);
-            if (mmtype == (VS_SW_VER | MMTYPE_CNF)) {
+            if (mmtype == (VS_HOST_ACTION | MMTYPE_IND)) {
+                send_host_action_rsp();
+            } else if (mmtype == (VS_SW_VER | MMTYPE_CNF)) {
                 bool bl = false;
                 if (parse_sw_ver_cnf(s_recv, (uint16_t)rlen, &bl) && !bl) {
                     debug_printf("Runtime firmware detected\n");
@@ -435,45 +437,51 @@ static bool mod_start_session(uint32_t session_id,
      * MOD_OP_RSVD(4) + SESSION_ID(4) + NUM_MODULES(1) + N×12 = 9 + N×12 */
     uint16_t mod_op_data_len = (uint16_t)(9u + (uint16_t)num_modules * 12u);
 
-    uint16_t pos = build_mme_header(s_send, VS_MODULE_OPERATION | MMTYPE_REQ);
+    uint32_t overall_start = millis();
+    do {
+        /* (Re)build and send the request on every attempt */
+        uint16_t pos = build_mme_header(s_send, VS_MODULE_OPERATION | MMTYPE_REQ);
 
-    memset(s_send + pos, 0, 4);  pos += 4; /* RESERVED1        */
-    s_send[pos++] = 1;                      /* NUM_OP_DATA      */
-    wr16le(s_send + pos, MOD_OP_START_SESSION); pos += 2;
-    wr16le(s_send + pos, mod_op_data_len);  pos += 2;
-    memset(s_send + pos, 0, 4);  pos += 4; /* MOD_OP_RSVD      */
-    wr32le(s_send + pos, session_id);       pos += 4;
-    s_send[pos++] = num_modules;
+        memset(s_send + pos, 0, 4);  pos += 4; /* RESERVED1        */
+        s_send[pos++] = 1;                      /* NUM_OP_DATA      */
+        wr16le(s_send + pos, MOD_OP_START_SESSION); pos += 2;
+        wr16le(s_send + pos, mod_op_data_len);  pos += 2;
+        memset(s_send + pos, 0, 4);  pos += 4; /* MOD_OP_RSVD      */
+        wr32le(s_send + pos, session_id);       pos += 4;
+        s_send[pos++] = num_modules;
 
-    for (uint8_t i = 0; i < num_modules; i++) {
-        wr16le(s_send + pos, modules[i].module_id);       pos += 2;
-        wr16le(s_send + pos, modules[i].module_sub_id);   pos += 2;
-        wr32le(s_send + pos, modules[i].module_length);   pos += 4;
-        wr32le(s_send + pos, modules[i].module_chksum);   pos += 4;
-    }
-
-    if (qca_send_frame(s_send, pos) != 0) return false;
-
-    uint32_t t = millis();
-    while ((millis() - t) < 2000u) {
-        uint16_t rlen = 0;
-        if (qca_recv_frame(s_recv, &rlen, (uint16_t)sizeof(s_recv)) != 1)
-            continue;
-        uint16_t mmtype = frame_mmtype(s_recv, rlen);
-        if (mmtype == (VS_HOST_ACTION | MMTYPE_IND)) {
-            send_host_action_rsp();
-            continue;
+        for (uint8_t i = 0; i < num_modules; i++) {
+            wr16le(s_send + pos, modules[i].module_id);       pos += 2;
+            wr16le(s_send + pos, modules[i].module_sub_id);   pos += 2;
+            wr32le(s_send + pos, modules[i].module_length);   pos += 4;
+            wr32le(s_send + pos, modules[i].module_chksum);   pos += 4;
         }
-        if (mmtype == (VS_MODULE_OPERATION | MMTYPE_CNF)) {
-            if (rlen < (uint16_t)(MME_HDR_LEN + 2u)) return false;
-            uint16_t status = rd16le(s_recv + MME_HDR_LEN);
-            if (status != 0) {
-                debug_printf("START_SESSION err %x\n", (unsigned)status);
-                return false;
+
+        if (qca_send_frame(s_send, pos) != 0) return false;
+
+        uint32_t resp_start = millis();
+        do {
+            uint16_t rlen = 0;
+            if (qca_recv_frame(s_recv, &rlen, (uint16_t)sizeof(s_recv)) != 1)
+                continue;
+            uint16_t mmtype = frame_mmtype(s_recv, rlen);
+            if (mmtype == (VS_HOST_ACTION | MMTYPE_IND)) {
+                send_host_action_rsp();
+                break; /* break inner loop: outer loop will resend the request */
             }
-            return true;
-        }
-    }
+            if (mmtype == (VS_MODULE_OPERATION | MMTYPE_CNF)) {
+                if (rlen < (uint16_t)(MME_HDR_LEN + 2u)) return false;
+                uint16_t status = rd16le(s_recv + MME_HDR_LEN);
+                if (status != 0) {
+                    debug_printf("START_SESSION err %x\n", (unsigned)status);
+                    return false;
+                }
+                return true;
+            }
+        } while ((millis() - resp_start) < 500u);
+
+    } while ((millis() - overall_start) < 5000u);
+
     debug_printf("START_SESSION timeout\n");
     return false;
 }
