@@ -29,7 +29,7 @@ FW_SRCS := src/hwinit.cpp \
            src/main.cpp
 
 FW_OBJS  := $(FW_SRCS:.cpp=.fw.o)
-ASM_OBJ  := src/embedded_images.fw.o
+ASM_OBJ  := src/embedded_data.fw.o
 
 # ── Test sources ──────────────────────────────────────────────────────────
 TEST_SRCS := tests/test_programmer.cpp \
@@ -49,7 +49,7 @@ all: firmware
 firmware: check-cross-tools get-deps $(FW_OBJS) $(ASM_OBJ)
 	$(CXX) $(LDFLAGS_FW) -o firmware.elf $(FW_OBJS) $(ASM_OBJ) $(FW_LIBS)
 	$(OBJCOPY) -O binary firmware.elf firmware.bin
-	@echo "firmware.bin built ($(shell wc -c < firmware.bin) bytes)"
+	@echo "firmware.bin built ($$(wc -c < firmware.bin) bytes)"
 
 %.fw.o: %.cpp
 	$(CXX) $(CXXFLAGS_FW) -c $< -o $@
