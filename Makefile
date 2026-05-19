@@ -49,6 +49,7 @@ all: firmware
 firmware: check-cross-tools get-deps $(FW_OBJS) $(ASM_OBJ)
 	$(CXX) $(LDFLAGS_FW) -o firmware.elf $(FW_OBJS) $(ASM_OBJ) $(FW_LIBS)
 	$(OBJCOPY) -O binary firmware.elf firmware.bin
+	$(OBJCOPY) -O ihex firmware.elf firmware.hex
 	@echo "firmware.bin built ($$(wc -c < firmware.bin) bytes)"
 
 %.fw.o: %.cpp
@@ -76,4 +77,4 @@ check-cross-tools:
 
 # ── Clean ─────────────────────────────────────────────────────────────────
 clean:
-	rm -f src/*.fw.o firmware.elf firmware.bin tests/run_tests
+	rm -f src/*.fw.o firmware.elf firmware.bin firmware.hex tests/run_tests
