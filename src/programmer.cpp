@@ -72,11 +72,18 @@ extern uint32_t millis(void);
 #define MODULE_ID_PIB         0x7002u
 #define MODULE_ID_SOFTLOADER  0x7003u
 
-/* CLOSE_SESSION commit code */
+/* CLOSE_SESSION commit codes.
+ * PLC_COMMIT_FACTPIB (bit 31) is only valid when closing a PIB module
+ * session; sending it for non-PIB modules causes error 0x30.
+ * PLC_COMMIT_NORESET prevents an intermediate device reset so that the
+ * next module session can follow immediately without re-negotiation. */
 #define PLC_COMMIT_FORCE      (1u << 0)
 #define PLC_COMMIT_NORESET    (1u << 1)
 #define PLC_COMMIT_FACTPIB    (1u << 31)
-#define COMMIT_CODE           (PLC_COMMIT_FORCE | PLC_COMMIT_NORESET | PLC_COMMIT_FACTPIB)
+/* Softloader: no FACTPIB, keep NORESET so chip stays up for firmware+PIB */
+#define COMMIT_CODE_SOFTLOADER (PLC_COMMIT_FORCE | PLC_COMMIT_NORESET)
+/* Firmware+PIB: just FORCE — allow chip to reset and boot new firmware */
+#define COMMIT_CODE_FW_PIB     (PLC_COMMIT_FORCE)
 
 /* Session cookie */
 #define SESSION_ID  0x78563412u
@@ -654,7 +661,7 @@ bool programmer_run(const embedded_images_t *images)
                                      images->softloader.size,
                                      MODULE_ID_SOFTLOADER,
                                      SESSION_ID, 0, 1)) return false;
-        if (!mod_close_session(SESSION_ID, COMMIT_CODE)) return false;
+        if (!mod_close_session(SESSION_ID, COMMIT_CODE_SOFTLOADER)) return false;
     }
 
     /* ── 7. Flash firmware + PIB ─────────────────────────────────────────── */
@@ -680,7 +687,7 @@ bool programmer_run(const embedded_images_t *images)
         if (!programmer_flash_module(images->firmware.data, images->firmware.size,
                                      MODULE_ID_FW,
                                      SESSION_ID, 1, 2)) return false;
-        if (!mod_close_session(SESSION_ID, COMMIT_CODE)) return false;
+        if (!mod_close_session(SESSION_ID, COMMIT_CODE_FW_PIB)) return false;
     }
 
     /* ── Final: QCA resets and boots from NVM into runtime ─────────────── */
