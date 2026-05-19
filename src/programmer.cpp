@@ -128,6 +128,24 @@ uint32_t compute_crc32(const uint8_t *data, uint32_t len)
     return ~crc;
 }
 
+/* ── Module checksum (XOR of 32-bit LE words, matching open-plc-utils
+ *    checksum32(data, len, 0)) ──────────────────────────────────────────── */
+static uint32_t compute_module_checksum(const uint8_t *data, uint32_t len)
+{
+    uint32_t chk = 0;
+    while (len >= 4u) {
+        chk ^= rd32le(data);
+        data += 4;
+        len  -= 4u;
+    }
+    if (len > 0u) {
+        uint8_t tmp[4] = {0, 0, 0, 0};
+        for (uint32_t i = 0; i < len; i++) tmp[i] = data[i];
+        chk ^= rd32le(tmp);
+    }
+    return chk;
+}
+
 /* ── NVM traversal ──────────────────────────────────────────────────────── */
 bool nvm_find_image(const uint8_t *file, uint32_t file_size,
                     uint32_t image_type,
@@ -628,7 +646,7 @@ bool programmer_run(const embedded_images_t *images)
         spec.module_id     = MODULE_ID_SOFTLOADER;
         spec.module_sub_id = 0;
         spec.module_length = images->softloader.size;
-        spec.module_chksum = compute_crc32(images->softloader.data,
+        spec.module_chksum = compute_module_checksum(images->softloader.data,
                                            images->softloader.size);
 
         if (!mod_start_session(SESSION_ID, &spec, 1)) return false;
@@ -647,12 +665,12 @@ bool programmer_run(const embedded_images_t *images)
         specs[0].module_id     = MODULE_ID_PIB;
         specs[0].module_sub_id = 0;
         specs[0].module_length = images->pib.size;
-        specs[0].module_chksum = compute_crc32(images->pib.data, images->pib.size);
+        specs[0].module_chksum = compute_module_checksum(images->pib.data, images->pib.size);
 
         specs[1].module_id     = MODULE_ID_FW;
         specs[1].module_sub_id = 0;
         specs[1].module_length = images->firmware.size;
-        specs[1].module_chksum = compute_crc32(images->firmware.data,
+        specs[1].module_chksum = compute_module_checksum(images->firmware.data,
                                                images->firmware.size);
 
         if (!mod_start_session(SESSION_ID, specs, 2)) return false;
