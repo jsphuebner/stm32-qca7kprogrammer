@@ -458,9 +458,10 @@ typedef struct __attribute__((packed)) {
 static bool mod_start_session(uint32_t session_id,
                                const module_spec_t *modules, uint8_t num_modules)
 {
-    /* MOD_OP_DATA_LEN counts bytes after MOD_OP_DATA_LEN:
-     * MOD_OP_RSVD(4) + SESSION_ID(4) + NUM_MODULES(1) + N×12 = 9 + N×12 */
-    uint16_t mod_op_data_len = (uint16_t)(9u + (uint16_t)num_modules * 12u);
+    /* MOD_OP_DATA_LEN uses INCLUSIVE convention (counts from MOD_OP itself),
+     * matching open-plc-utils: MOD_OP(2)+MOD_OP_DATA_LEN(2)+MOD_OP_RSVD(4)+
+     * SESSION_ID(4)+NUM_MODULES(1)+N×12 = 13 + N×12 */
+    uint16_t mod_op_data_len = (uint16_t)(13u + (uint16_t)num_modules * 12u);
 
     uint32_t overall_start = millis();
     do {
@@ -513,16 +514,19 @@ static bool mod_start_session(uint32_t session_id,
 
 static bool mod_close_session(uint32_t session_id, uint32_t commit_code)
 {
-    /* MOD_OP_DATA_LEN: MOD_OP_RSVD(4) + SESSION_ID(4) + COMMIT_CODE(4) = 12 */
+    /* MOD_OP_DATA_LEN uses INCLUSIVE convention (counts from MOD_OP itself),
+     * matching open-plc-utils: MOD_OP(2)+MOD_OP_DATA_LEN(2)+MOD_OP_RSVD(4)+
+     * SESSION_ID(4)+COMMIT_CODE(4)+RSVD(20) = 36 */
     uint16_t pos = build_mme_header(s_send, VS_MODULE_OPERATION | MMTYPE_REQ);
 
     memset(s_send + pos, 0, 4);  pos += 4; /* RESERVED         */
     s_send[pos++] = 1;                      /* NUM_OP_DATA      */
     wr16le(s_send + pos, MOD_OP_CLOSE_SESSION); pos += 2;
-    wr16le(s_send + pos, 12);               pos += 2; /* MOD_OP_DATA_LEN */
+    wr16le(s_send + pos, 36);               pos += 2; /* MOD_OP_DATA_LEN */
     memset(s_send + pos, 0, 4);  pos += 4; /* MOD_OP_RSVD      */
     wr32le(s_send + pos, session_id);       pos += 4;
     wr32le(s_send + pos, commit_code);      pos += 4;
+    memset(s_send + pos, 0, 20); pos += 20; /* RSVD[20]        */
 
     if (send_frame(pos) != 0) return false;
 
@@ -562,9 +566,11 @@ bool programmer_flash_module(const uint8_t *file_data, uint32_t file_size,
         uint32_t chunk = file_size - byte_offset;
         if (chunk > PLC_MODULE_SIZE) chunk = PLC_MODULE_SIZE;
 
-        /* MOD_OP_DATA_LEN: MOD_OP_RSVD(4)+SESSION_ID(4)+IDX(1)+ID(2)+
-         *                   SUB_ID(2)+LENGTH(2)+OFFSET(4)+DATA(chunk) = 19+chunk */
-        uint16_t mod_op_data_len = (uint16_t)(19u + chunk);
+        /* MOD_OP_DATA_LEN uses INCLUSIVE convention (counts from MOD_OP itself),
+         * matching open-plc-utils: MOD_OP(2)+MOD_OP_DATA_LEN(2)+MOD_OP_RSVD(4)+
+         * SESSION_ID(4)+MODULE_IDX(1)+MODULE_ID(2)+SUB_ID(2)+LENGTH(2)+OFFSET(4)+
+         * DATA(chunk) = 23 + chunk */
+        uint16_t mod_op_data_len = (uint16_t)(23u + chunk);
 
         uint16_t pos = build_mme_header(s_send, VS_MODULE_OPERATION | MMTYPE_REQ);
 
