@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+    <FileVersion major="1" minor="6" />
+    <Project>
+        <Option title="stm32-qca7kprogrammer" />
+        <Option pch_mode="2" />
+        <Option compiler="gcc" />
+        <Build>
+            <!-- ── Firmware target (arm-none-eabi cross-compiler) ─────────── -->
+            <Target title="Firmware">
+                <Option output="firmware.elf" prefix_auto="0" extension_auto="0" />
+                <Option type="1" />
+                <Option compiler="arm-none-eabi-gcc" />
+                <Option createDefFile="0" />
+                <Compiler>
+                    <Add option="-mcpu=cortex-m3" />
+                    <Add option="-mthumb" />
+                    <Add option="-Os" />
+                    <Add option="-fno-exceptions" />
+                    <Add option="-fno-rtti" />
+                    <Add option="-ffunction-sections" />
+                    <Add option="-fdata-sections" />
+                    <Add option="-std=c++11" />
+                    <Add option="-Wall" />
+                    <Add option="-Wextra" />
+                    <Add option="-DSTM32F1" />
+                    <Add directory="libopencm3/include" />
+                    <Add directory="include" />
+                </Compiler>
+                <Linker>
+                    <Add option="-mcpu=cortex-m3" />
+                    <Add option="-mthumb" />
+                    <Add option="-nostdlib" />
+                    <Add option="-Tstm32f103.ld" />
+                    <Add option="-Wl,--gc-sections" />
+                    <Add directory="libopencm3/lib" />
+                    <Add library="opencm3_stm32f1" />
+                    <Add library="gcc" />
+                </Linker>
+            </Target>
+
+            <!-- ── Test target (native g++) ──────────────────────────────── -->
+            <Target title="Test">
+                <Option output="tests/run_tests" prefix_auto="0" extension_auto="0" />
+                <Option type="1" />
+                <Option compiler="gcc" />
+                <Option createDefFile="0" />
+                <Compiler>
+                    <Add option="-DUNIT_TEST" />
+                    <Add option="-std=c++11" />
+                    <Add option="-Wall" />
+                    <Add option="-Wextra" />
+                    <Add option="-g" />
+                    <Add directory="include" />
+                </Compiler>
+            </Target>
+        </Build>
+
+        <!-- ── Global compiler include (shown in IDE for all targets) ─────── -->
+        <Compiler>
+            <Add directory="include" />
+        </Compiler>
+
+        <!-- ── Source files ─────────────────────────────────────────────── -->
+        <!-- Firmware-only sources -->
+        <Unit filename="src/hwinit.cpp">
+            <Option target="Firmware" />
+        </Unit>
+        <Unit filename="src/qca_spi.cpp">
+            <Option target="Firmware" />
+        </Unit>
+        <Unit filename="src/embedded_images.cpp">
+            <Option target="Firmware" />
+        </Unit>
+        <Unit filename="src/embedded_images.s">
+            <Option target="Firmware" />
+        </Unit>
+        <Unit filename="src/main.cpp">
+            <Option target="Firmware" />
+        </Unit>
+
+        <!-- Shared sources (both Firmware and Test) -->
+        <Unit filename="src/programmer.cpp">
+            <Option target="Firmware" />
+            <Option target="Test" />
+        </Unit>
+        <Unit filename="src/debug.cpp">
+            <Option target="Firmware" />
+            <Option target="Test" />
+        </Unit>
+
+        <!-- Test-only sources -->
+        <Unit filename="tests/test_programmer.cpp">
+            <Option target="Test" />
+        </Unit>
+        <Unit filename="tests/mock_qca.cpp">
+            <Option target="Test" />
+        </Unit>
+
+        <!-- ── Header files (for IDE navigation) ────────────────────────── -->
+        <Unit filename="include/debug.h" />
+        <Unit filename="include/embedded_images.h" />
+        <Unit filename="include/hwinit.h" />
+        <Unit filename="include/nvm.h" />
+        <Unit filename="include/programmer.h" />
+        <Unit filename="include/qca_spi.h" />
+
+        <!-- ── Misc project files ────────────────────────────────────────── -->
+        <Unit filename="Makefile" />
+        <Unit filename="stm32f103.ld" />
+        <Unit filename="README.md" />
+
+        <Extensions />
+    </Project>
+</CodeBlocks_project_file>
