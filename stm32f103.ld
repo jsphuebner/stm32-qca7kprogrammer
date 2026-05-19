@@ -1,5 +1,7 @@
 /* STM32F103 512KB flash / 64KB RAM linker script */
 
+ENTRY(reset_handler)
+
 MEMORY
 {
     FLASH (rx)  : ORIGIN = 0x08000000, LENGTH = 512K
