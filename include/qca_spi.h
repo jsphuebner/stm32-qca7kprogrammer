@@ -20,6 +20,9 @@
 #define SPI_REG_INTR_ENABLE     0x0D00u
 #define SPI_REG_SIGNATURE       0x1A00u
 
+/* SPI_REG_INTR_CAUSE / SPI_REG_INTR_ENABLE bit definitions (write-1-to-clear) */
+#define SPI_INT_PKT_AVLBL       (1u << 2)  /* packet available in read buffer */
+
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
 #ifdef __cplusplus
