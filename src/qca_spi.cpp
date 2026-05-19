@@ -73,6 +73,10 @@ int qca_send_frame(const uint8_t *eth_frame, uint16_t eth_len)
     spi_xfer(SPI1, 0x55); spi_xfer(SPI1, 0x55);
 
     CS_HIGH();
+
+    uint32_t t = millis();
+    while ((millis() - t) < 200u);
+
     return 0;
 }
 
