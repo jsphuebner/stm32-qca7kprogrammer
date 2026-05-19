@@ -457,7 +457,7 @@ static bool mod_start_session(uint32_t session_id,
             wr32le(s_send + pos, modules[i].module_chksum);   pos += 4;
         }
 
-        if (qca_send_frame(s_send, pos) != 0) return false;
+        if (send_frame(pos) != 0) return false;
 
         uint32_t resp_start = millis();
         do {
