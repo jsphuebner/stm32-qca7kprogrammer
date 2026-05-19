@@ -135,8 +135,8 @@ uint32_t compute_crc32(const uint8_t *data, uint32_t len)
     return ~crc;
 }
 
-/* ── Module checksum (XOR of 32-bit LE words, matching open-plc-utils
- *    checksum32(data, len, 0)) ──────────────────────────────────────────── */
+/* ── Module checksum: one's complement of XOR of all 32-bit LE words,
+ *    matching open-plc-utils checksum32(data, len, 0) / fdchecksum32() ─── */
 static uint32_t compute_module_checksum(const uint8_t *data, uint32_t len)
 {
     uint32_t chk = 0;
@@ -150,7 +150,7 @@ static uint32_t compute_module_checksum(const uint8_t *data, uint32_t len)
         for (uint32_t i = 0; i < len; i++) tmp[i] = data[i];
         chk ^= rd32le(tmp);
     }
-    return chk;
+    return ~chk;
 }
 
 /* ── NVM traversal ──────────────────────────────────────────────────────── */
