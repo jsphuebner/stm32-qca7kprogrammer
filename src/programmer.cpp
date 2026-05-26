@@ -82,8 +82,8 @@ extern uint32_t millis(void);
 #define PLC_COMMIT_FACTPIB    (1u << 31)
 /* Softloader: no FACTPIB, keep NORESET so chip stays up for firmware+PIB */
 #define COMMIT_CODE_SOFTLOADER (PLC_COMMIT_FORCE | PLC_COMMIT_NORESET)
-/* Firmware+PIB: just FORCE — allow chip to reset and boot new firmware */
-#define COMMIT_CODE_FW_PIB     (PLC_COMMIT_FORCE)
+/* Firmware+PIB session must set FACTPIB because session includes PIB module. */
+#define COMMIT_CODE_FW_PIB     (PLC_COMMIT_FORCE | PLC_COMMIT_FACTPIB)
 
 /* Session cookie */
 #define SESSION_ID  0x78563412u
