@@ -336,9 +336,9 @@ static bool test_programmer_run_integration(void)
  * than PLC_MODULE_SIZE (1400 bytes) so that programmer_flash_module sends
  * multiple WRITE_MODULE chunks.  This exercises the fix that extracts raw
  * image data from the NVM wrapper before calling programmer_flash_module. */
-#define MULTICHUNK_FW_IMAGE_LEN  2800u  /* 2 full chunks */
-#define MULTICHUNK_PIB_IMAGE_LEN 1500u  /* 2 chunks (1400 + 100) */
-#define MULTICHUNK_SL_IMAGE_LEN  2100u  /* 2 chunks (1400 + 700) */
+#define MULTICHUNK_FW_IMAGE_LEN  2800u  /* 2 full chunks (> 2 * PLC_MODULE_SIZE) */
+#define MULTICHUNK_PIB_IMAGE_LEN 1500u  /* 2 chunks (> PLC_MODULE_SIZE) */
+#define MULTICHUNK_SL_IMAGE_LEN  2100u  /* 2 chunks (> PLC_MODULE_SIZE) */
 
 /* fw layout: manifest(96) + memctl_hdr(96)+32 + fw_hdr(96)+MULTICHUNK_FW_IMAGE_LEN */
 #define MULTICHUNK_FW_BUF_LEN  (96u + 96u + 32u + 96u + MULTICHUNK_FW_IMAGE_LEN)
