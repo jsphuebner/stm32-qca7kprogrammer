@@ -69,10 +69,19 @@ static const uint8_t k_src_mac[6] = {0x00, 0xB0, 0x52, 0x00, 0x00, 0x00};
 
 #define MOD_OP_START_SESSION 0x0010u
 #define MOD_OP_CLOSE_SESSION 0x0012u
+#define MSTATUS_INVALID_COMMIT_CODE 0x0044u
+#define MIN_MOD_OP_PAYLOAD_LEN 27u
 
 static inline uint16_t rd16le(const uint8_t *p)
 {
     return (uint16_t)(p[0] | ((uint16_t)p[1] << 8));
+}
+static inline uint32_t rd32le(const uint8_t *p)
+{
+    return (uint32_t)p[0]
+         | ((uint32_t)p[1] << 8)
+         | ((uint32_t)p[2] << 16)
+         | ((uint32_t)p[3] << 24);
 }
 static inline void wr16le(uint8_t *p, uint16_t v)
 {
@@ -184,7 +193,9 @@ int qca_send_frame(const uint8_t *eth_frame, uint16_t eth_len)
         break;
     case VS_MODULE_OPERATION | MMTYPE_REQ:
     {
-        if (eth_len < (uint16_t)(MME_HDR_LEN + 27u)) {
+        /* Minimum VS_MODULE_OPERATION payload needed to read MOD_OP and the
+         * CLOSE_SESSION commit_code field (4 bytes starting at offset 17). */
+        if (eth_len < (uint16_t)(MME_HDR_LEN + MIN_MOD_OP_PAYLOAD_LEN)) {
             queue_module_op_cnf(0);
             break;
         }
@@ -196,14 +207,11 @@ int qca_send_frame(const uint8_t *eth_frame, uint16_t eth_len)
             break;
         }
         if (mod_op == MOD_OP_CLOSE_SESSION) {
-            uint32_t commit_code = (uint32_t)p[17]
-                                 | ((uint32_t)p[18] << 8)
-                                 | ((uint32_t)p[19] << 16)
-                                 | ((uint32_t)p[20] << 24);
+            uint32_t commit_code = rd32le(p + 17);
             /* Firmware+PIB session requires FACTPIB in commit code. */
             if (s_active_num_modules == 2 &&
                 (commit_code & PLC_COMMIT_FACTPIB) == 0) {
-                queue_module_op_cnf(0x0044u);
+                queue_module_op_cnf(MSTATUS_INVALID_COMMIT_CODE);
             } else {
                 queue_module_op_cnf(0);
             }
