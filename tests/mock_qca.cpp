@@ -15,7 +15,6 @@
 /* ── Mock state ─────────────────────────────────────────────────────────── */
 static bool    s_runtime_mode        = false;
 static bool    s_autoswitch_on_exec  = false; /* switch to runtime on W&E+EXECUTE */
-static uint8_t s_active_num_modules  = 0;
 static uint8_t s_pending_rx[1520];
 static uint16_t s_pending_rx_len     = 0;
 static uint32_t s_millis             = 0;
@@ -31,7 +30,6 @@ void mock_reset(void)
 {
     s_runtime_mode       = false;
     s_autoswitch_on_exec = false;
-    s_active_num_modules = 0;
     s_pending_rx_len     = 0;
     s_millis             = 0;
 }
@@ -65,23 +63,10 @@ static const uint8_t k_src_mac[6] = {0x00, 0xB0, 0x52, 0x00, 0x00, 0x00};
 #define MMTYPE_CNF  0x0001u
 
 #define PLC_MODULE_EXECUTE  (1u << 0)  /* FLAGS bit in W&E request payload */
-#define PLC_COMMIT_FACTPIB  (1u << 31)
-
-#define MOD_OP_START_SESSION 0x0010u
-#define MOD_OP_CLOSE_SESSION 0x0012u
-#define MSTATUS_INVALID_COMMIT_CODE 0x0044u
-#define MIN_MOD_OP_PAYLOAD_LEN 27u
 
 static inline uint16_t rd16le(const uint8_t *p)
 {
     return (uint16_t)(p[0] | ((uint16_t)p[1] << 8));
-}
-static inline uint32_t rd32le(const uint8_t *p)
-{
-    return (uint32_t)p[0]
-         | ((uint32_t)p[1] << 8)
-         | ((uint32_t)p[2] << 16)
-         | ((uint32_t)p[3] << 24);
 }
 static inline void wr16le(uint8_t *p, uint16_t v)
 {
@@ -153,12 +138,12 @@ static void queue_write_execute_cnf(const uint8_t *req, uint16_t req_len)
     s_pending_rx_len = pos;
 }
 
-static void queue_module_op_cnf(uint16_t mstatus)
+static void queue_module_op_cnf(void)
 {
     uint8_t *buf = s_pending_rx;
     build_response_header(buf, VS_MODULE_OPERATION | MMTYPE_CNF);
     uint16_t pos = (uint16_t)MME_HDR_LEN;
-    wr16le(buf + pos, mstatus); pos += 2;  /* MSTATUS */
+    wr16le(buf + pos, 0); pos += 2;  /* MSTATUS = 0 */
     wr16le(buf + pos, 0); pos += 2;  /* ERR_REC_CODE */
     if (pos < 60) { memset(buf + pos, 0, 60 - pos); pos = 60; }
     s_pending_rx_len = pos;
@@ -192,35 +177,8 @@ int qca_send_frame(const uint8_t *eth_frame, uint16_t eth_len)
         queue_write_execute_cnf(eth_frame, eth_len);
         break;
     case VS_MODULE_OPERATION | MMTYPE_REQ:
-    {
-        /* Minimum VS_MODULE_OPERATION payload needed to read MOD_OP and the
-         * CLOSE_SESSION commit_code field (4 bytes starting at offset 17). */
-        if (eth_len < (uint16_t)(MME_HDR_LEN + MIN_MOD_OP_PAYLOAD_LEN)) {
-            queue_module_op_cnf(0);
-            break;
-        }
-        const uint8_t *p = eth_frame + MME_HDR_LEN;
-        uint16_t mod_op = rd16le(p + 5);
-        if (mod_op == MOD_OP_START_SESSION) {
-            s_active_num_modules = p[17];
-            queue_module_op_cnf(0);
-            break;
-        }
-        if (mod_op == MOD_OP_CLOSE_SESSION) {
-            uint32_t commit_code = rd32le(p + 17);
-            /* Firmware+PIB session requires FACTPIB in commit code. */
-            if (s_active_num_modules == 2 &&
-                (commit_code & PLC_COMMIT_FACTPIB) == 0) {
-                queue_module_op_cnf(MSTATUS_INVALID_COMMIT_CODE);
-            } else {
-                queue_module_op_cnf(0);
-            }
-            s_active_num_modules = 0;
-            break;
-        }
-        queue_module_op_cnf(0);
+        queue_module_op_cnf();
         break;
-    }
     default:
         break;
     }
