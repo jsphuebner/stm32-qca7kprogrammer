@@ -566,11 +566,13 @@ bool programmer_flash_module(const uint8_t *file_data, uint32_t file_size,
         uint32_t chunk = file_size - byte_offset;
         if (chunk > PLC_MODULE_SIZE) chunk = PLC_MODULE_SIZE;
 
-        /* MOD_OP_DATA_LEN uses INCLUSIVE convention (counts from MOD_OP itself),
-         * matching open-plc-utils: MOD_OP(2)+MOD_OP_DATA_LEN(2)+MOD_OP_RSVD(4)+
-         * SESSION_ID(4)+MODULE_IDX(1)+MODULE_ID(2)+SUB_ID(2)+LENGTH(2)+OFFSET(4)+
-         * DATA(chunk) = 23 + chunk */
-        uint16_t mod_op_data_len = (uint16_t)(23u + chunk);
+        /* MOD_OP_DATA_LEN uses INCLUSIVE convention (counts from MOD_OP itself).
+         * open-plc-utils always uses sizeof(MODULE_SPEC)+sizeof(MODULE_DATA) =
+         * MOD_OP(2)+MOD_OP_DATA_LEN(2)+MOD_OP_RSVD(4)+SESSION_ID(4)+
+         * MODULE_IDX(1)+MODULE_ID(2)+SUB_ID(2)+LENGTH(2)+OFFSET(4)+
+         * DATA(1400) = 23 + PLC_MODULE_SIZE, even for the last partial chunk.
+         * MODULE_LENGTH tells the device how many bytes in DATA are valid. */
+        uint16_t mod_op_data_len = (uint16_t)(23u + PLC_MODULE_SIZE);
 
         uint16_t pos = build_mme_header(s_send, VS_MODULE_OPERATION | MMTYPE_REQ);
 
@@ -587,7 +589,10 @@ bool programmer_flash_module(const uint8_t *file_data, uint32_t file_size,
         wr32le(s_send + pos, byte_offset);         pos += 4; /* OFFSET  */
 
         memcpy(s_send + pos, file_data + byte_offset, chunk);
-        pos = (uint16_t)(pos + chunk);
+        if (chunk < PLC_MODULE_SIZE) {
+            memset(s_send + pos + chunk, 0, PLC_MODULE_SIZE - chunk);
+        }
+        pos = (uint16_t)(pos + PLC_MODULE_SIZE);
 
         if (qca_send_frame(s_send, pos) != 0) return false;
 
