@@ -121,6 +121,15 @@ static inline void wr32le(uint8_t *p, uint32_t v)
     p[3] = (uint8_t)(v >> 24);
 }
 
+static const char *device_error_symbol(uint32_t status)
+{
+    switch (status) {
+    case 0x00u: return "SUCCESS";
+    case 0x30u: return "FACTPIB_FLAG_INVALID_FOR_SESSION";
+    default:    return "UNKNOWN_DEVICE_ERROR";
+    }
+}
+
 /* ── CRC32 (IEEE 802.3 polynomial 0xEDB88320) ───────────────────────────── */
 uint32_t compute_crc32(const uint8_t *data, uint32_t len)
 {
@@ -404,7 +413,8 @@ bool programmer_write_execute(const uint8_t *image_data,
                 if (rlen < (uint16_t)(MME_HDR_LEN + 36u)) return false;
                 uint32_t mstatus = rd32le(s_recv + MME_HDR_LEN);
                 if (mstatus != 0) {
-                    debug_printf("W&E CNF error %x\n", (unsigned)mstatus);
+                    debug_printf("W&E CNF error %x (%s)\n",
+                                 (unsigned)mstatus, device_error_symbol(mstatus));
                     return false;
                 }
                 /* CURR_PART_LENGTH at payload offset 28, CURR_PART_OFFSET at 32 */
@@ -499,7 +509,8 @@ static bool mod_start_session(uint32_t session_id,
                 if (rlen < (uint16_t)(MME_HDR_LEN + 2u)) return false;
                 uint16_t status = rd16le(s_recv + MME_HDR_LEN);
                 if (status != 0) {
-                    debug_printf("START_SESSION err %x\n", (unsigned)status);
+                    debug_printf("START_SESSION err %x (%s)\n",
+                                 (unsigned)status, device_error_symbol(status));
                     return false;
                 }
                 return true;
@@ -544,7 +555,8 @@ static bool mod_close_session(uint32_t session_id, uint32_t commit_code)
             if (rlen < (uint16_t)(MME_HDR_LEN + 2u)) return false;
             uint16_t status = rd16le(s_recv + MME_HDR_LEN);
             if (status != 0) {
-                debug_printf("CLOSE_SESSION err %x\n", (unsigned)status);
+                debug_printf("CLOSE_SESSION err %x (%s)\n",
+                             (unsigned)status, device_error_symbol(status));
                 return false;
             }
             return true;
@@ -606,7 +618,8 @@ bool programmer_flash_module(const uint8_t *file_data, uint32_t file_size,
                 if (rlen < (uint16_t)(MME_HDR_LEN + 2u)) return false;
                 uint16_t status = rd16le(s_recv + MME_HDR_LEN);
                 if (status != 0) {
-                    debug_printf("WRITE_MODULE err %x\n", (unsigned)status);
+                    debug_printf("WRITE_MODULE err %x (%s)\n",
+                                 (unsigned)status, device_error_symbol(status));
                     return false;
                 }
                 got_cnf = true;
