@@ -673,24 +673,45 @@ bool programmer_run(const embedded_images_t *images)
     /* ── 7. Flash firmware + PIB ─────────────────────────────────────────── */
     debug_printf("Step 7: Flash firmware + PIB\n");
     {
+        /* Extract raw image data from the NVM-wrapped files.  VS_MODULE_OPERATION
+         * expects the bare image bytes (no NVM header wrapper), matching the
+         * behaviour of open-plc-utils FlashDevice2.  Sending the whole NVM file
+         * causes the device to receive manifest/memctl headers instead of valid
+         * firmware bytes at offset 0, which makes it stop responding after the
+         * first write chunk. */
+        const nvm_header2_t *pib_hdr  = NULL;
+        const uint8_t       *pib_data = NULL;
+        if (!nvm_find_image(images->pib.data, images->pib.size,
+                            NVM_IMAGE_PIB, &pib_hdr, &pib_data)) {
+            debug_printf("PIB image not found in pib file\n");
+            return false;
+        }
+
+        const nvm_header2_t *fw_hdr  = NULL;
+        const uint8_t       *fw_data = NULL;
+        if (!nvm_find_image(images->firmware.data, images->firmware.size,
+                            NVM_IMAGE_FIRMWARE, &fw_hdr, &fw_data)) {
+            debug_printf("Firmware image not found in firmware file\n");
+            return false;
+        }
+
         module_spec_t specs[2];
         /* Index 0 = PIB, Index 1 = firmware (per open-plc-utils FlashDevice2) */
         specs[0].module_id     = MODULE_ID_PIB;
         specs[0].module_sub_id = 0;
-        specs[0].module_length = images->pib.size;
-        specs[0].module_chksum = compute_module_checksum(images->pib.data, images->pib.size);
+        specs[0].module_length = pib_hdr->ImageLength;
+        specs[0].module_chksum = compute_module_checksum(pib_data, pib_hdr->ImageLength);
 
         specs[1].module_id     = MODULE_ID_FW;
         specs[1].module_sub_id = 0;
-        specs[1].module_length = images->firmware.size;
-        specs[1].module_chksum = compute_module_checksum(images->firmware.data,
-                                               images->firmware.size);
+        specs[1].module_length = fw_hdr->ImageLength;
+        specs[1].module_chksum = compute_module_checksum(fw_data, fw_hdr->ImageLength);
 
         if (!mod_start_session(SESSION_ID, specs, 2)) return false;
-        if (!programmer_flash_module(images->pib.data, images->pib.size,
+        if (!programmer_flash_module(pib_data, pib_hdr->ImageLength,
                                      MODULE_ID_PIB,
                                      SESSION_ID, 0, 2)) return false;
-        if (!programmer_flash_module(images->firmware.data, images->firmware.size,
+        if (!programmer_flash_module(fw_data, fw_hdr->ImageLength,
                                      MODULE_ID_FW,
                                      SESSION_ID, 1, 2)) return false;
         if (!mod_close_session(SESSION_ID, COMMIT_CODE_FW_PIB)) return false;

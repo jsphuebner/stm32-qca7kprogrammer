@@ -332,6 +332,109 @@ static bool test_programmer_run_integration(void)
     return true;
 }
 
+/* Multi-chunk helpers: build NVM files where the embedded image data is larger
+ * than PLC_MODULE_SIZE (1400 bytes) so that programmer_flash_module sends
+ * multiple WRITE_MODULE chunks.  This exercises the fix that extracts raw
+ * image data from the NVM wrapper before calling programmer_flash_module. */
+#define MULTICHUNK_FW_IMAGE_LEN  2800u  /* 2 full chunks */
+#define MULTICHUNK_PIB_IMAGE_LEN 1500u  /* 2 chunks (1400 + 100) */
+#define MULTICHUNK_SL_IMAGE_LEN  2100u  /* 2 chunks (1400 + 700) */
+
+/* fw layout: manifest(96) + memctl_hdr(96)+32 + fw_hdr(96)+MULTICHUNK_FW_IMAGE_LEN */
+#define MULTICHUNK_FW_BUF_LEN  (96u + 96u + 32u + 96u + MULTICHUNK_FW_IMAGE_LEN)
+/* pib layout: manifest(96) + pib_hdr(96)+MULTICHUNK_PIB_IMAGE_LEN */
+#define MULTICHUNK_PIB_BUF_LEN (96u + 96u + MULTICHUNK_PIB_IMAGE_LEN)
+/* sl layout: manifest(96) + sl_hdr(96)+MULTICHUNK_SL_IMAGE_LEN */
+#define MULTICHUNK_SL_BUF_LEN  (96u + 96u + MULTICHUNK_SL_IMAGE_LEN)
+
+static void make_fw_nvm_large(uint8_t *buf, uint32_t size)
+{
+    memset(buf, 0xA5, size);
+    uint32_t off = 0;
+
+    nvm_header2_t *h = reinterpret_cast<nvm_header2_t *>(buf + off);
+    h->MajorVersion = 1; h->MinorVersion = 1;
+    h->ImageType = NVM_IMAGE_MANIFEST; h->ImageLength = 0;
+    h->NextHeader = off + 96; off += 96;
+
+    h = reinterpret_cast<nvm_header2_t *>(buf + off);
+    h->MajorVersion = 1; h->MinorVersion = 1;
+    h->ImageType = NVM_IMAGE_MEMCTL;
+    h->ImageAddress = 0x10000u; h->EntryPoint = 0x10004u;
+    h->ImageLength  = 32;
+    h->NextHeader   = off + 96 + 32; off += 96 + 32;
+
+    h = reinterpret_cast<nvm_header2_t *>(buf + off);
+    h->MajorVersion = 1; h->MinorVersion = 1;
+    h->ImageType = NVM_IMAGE_FIRMWARE;
+    h->ImageAddress = 0x20000u; h->EntryPoint = 0x20004u;
+    h->ImageLength  = MULTICHUNK_FW_IMAGE_LEN;
+    h->NextHeader   = NVM_NO_NEXT_HEADER;
+    /* image data follows immediately after header — already filled with 0xA5 */
+}
+
+static void make_pib_nvm_large(uint8_t *buf, uint32_t size)
+{
+    memset(buf, 0x5A, size);
+
+    nvm_header2_t *h = reinterpret_cast<nvm_header2_t *>(buf);
+    h->MajorVersion = 1; h->MinorVersion = 1;
+    h->ImageType = NVM_IMAGE_MANIFEST; h->ImageLength = 0;
+    h->NextHeader = 96;
+
+    h = reinterpret_cast<nvm_header2_t *>(buf + 96);
+    h->MajorVersion = 1; h->MinorVersion = 1;
+    h->ImageType    = NVM_IMAGE_PIB;
+    h->ImageAddress = 0x30000u; h->EntryPoint = NVM_NO_NEXT_HEADER;
+    h->ImageLength  = MULTICHUNK_PIB_IMAGE_LEN;
+    h->NextHeader   = NVM_NO_NEXT_HEADER;
+}
+
+static void make_sl_nvm_large(uint8_t *buf, uint32_t size)
+{
+    memset(buf, 0xBB, size);
+
+    nvm_header2_t *h = reinterpret_cast<nvm_header2_t *>(buf);
+    h->MajorVersion = 1; h->MinorVersion = 1;
+    h->ImageType = NVM_IMAGE_MANIFEST; h->ImageLength = 0;
+    h->NextHeader = 96;
+
+    h = reinterpret_cast<nvm_header2_t *>(buf + 96);
+    h->MajorVersion = 1; h->MinorVersion = 1;
+    h->ImageType    = NVM_IMAGE_SOFTLOADER;
+    h->ImageAddress = 0x40000u; h->EntryPoint = NVM_NO_NEXT_HEADER;
+    h->ImageLength  = MULTICHUNK_SL_IMAGE_LEN;
+    h->NextHeader   = NVM_NO_NEXT_HEADER;
+}
+
+/* Full programmer_run() with multi-chunk module images.
+ * Verifies that step 7 correctly extracts raw image data from the NVM wrapper
+ * so that MODULE_ID_FW and MODULE_ID_PIB receive image bytes rather than NVM
+ * headers.  Before the fix, the firmware module would timeout at offset=1400
+ * because the device received NVM manifest/memctl header bytes. */
+static bool test_programmer_run_multichunk(void)
+{
+    static uint8_t fw_buf[MULTICHUNK_FW_BUF_LEN];
+    static uint8_t pib_buf[MULTICHUNK_PIB_BUF_LEN];
+    static uint8_t sl_buf[MULTICHUNK_SL_BUF_LEN];
+
+    make_fw_nvm_large(fw_buf,   sizeof(fw_buf));
+    make_pib_nvm_large(pib_buf, sizeof(pib_buf));
+    make_sl_nvm_large(sl_buf,   sizeof(sl_buf));
+
+    embedded_images_t imgs;
+    imgs.firmware.data   = fw_buf;   imgs.firmware.size   = sizeof(fw_buf);
+    imgs.pib.data        = pib_buf;  imgs.pib.size        = sizeof(pib_buf);
+    imgs.softloader.data = sl_buf;   imgs.softloader.size = sizeof(sl_buf);
+
+    mock_reset();
+    mock_enable_autoswitch();
+
+    bool ok = programmer_run(&imgs);
+    TEST_ASSERT(ok);
+    return true;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
  * Real NVM file tests
  * ═══════════════════════════════════════════════════════════════════════════ */
@@ -410,6 +513,7 @@ int main(void)
     run_test("find_and_upload",           test_find_and_upload);
     run_test("programmer_run_steps",      test_programmer_run_steps);
     run_test("programmer_run_integration",test_programmer_run_integration);
+    run_test("programmer_run_multichunk", test_programmer_run_multichunk);
     run_test("real_softloader_nvm",       test_real_softloader_nvm);
     run_test("real_firmware_nvm",         test_real_firmware_nvm);
     run_test("real_pib",                  test_real_pib);
